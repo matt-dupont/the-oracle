@@ -1,3 +1,10 @@
+// src/world/Chunk.js
+// PERF-focused chunk rendering:
+// - Surface blocks only
+// - Limited cliff skirts (bounded)
+// - Water/ice overlays
+// This keeps movement/loading smooth.
+
 import {
     MeshBuilder,
     StandardMaterial,
@@ -12,9 +19,12 @@ import {
     getColorForHeight,
     getWaterColor,
     WATER_LEVEL,
-    getRavineFactor,
+    getIceFactor,
+    getRiverFactor,
+    getMaterialAt,
 } from "./terrain.js";
 
+import { getBiomeAt } from "./biomes.js";
 import { getTreeAt, getTreeColors } from "./objects.js";
 
 export class Chunk {
@@ -35,13 +45,9 @@ export class Chunk {
         const xOffset = this.cx * Chunk.SIZE;
         const zOffset = this.cz * Chunk.SIZE;
 
-        // Crisp, intentional gaps (your “clean grid” vibe)
-        const GAP_SCALE = 0.885;
+        const GAP_SCALE = 0.90;
+        const SKIRT_DEPTH = 10;
 
-        // How far we fill cliff “skirts” (keeps perf + prevents “infinite walls”)
-        const MAX_SIDE_FILL = 6;
-
-        // ===== surface master =====
         const surface = MeshBuilder.CreateBox(
             `surface_${this.cx}_${this.cz}`,
             { size: 1 },
@@ -52,17 +58,16 @@ export class Chunk {
         surface.position.set(xOffset, 0, zOffset);
 
         const surfMat = new StandardMaterial(`surfMat_${this.cx}_${this.cz}`, this.scene);
-        surfMat.disableLighting = false;        // keep cube shading + separation
+        surfMat.disableLighting = false;
         surfMat.useVertexColors = true;
         surfMat.emissiveColor = new Color3(0, 0, 0);
-        surfMat.diffuseColor = new Color3(1, 1, 1); // 100% white base so vertex colors are pure
+        surfMat.diffuseColor = new Color3(1, 1, 1);
         surfMat.specularColor = new Color3(0, 0, 0);
         surface.material = surfMat;
 
-        // ===== water master =====
         const water = MeshBuilder.CreateBox(
             `water_${this.cx}_${this.cz}`,
-            { size: 1, height: 0.12 },
+            { size: 1 },
             this.scene
         );
         water.isVisible = true;
@@ -74,49 +79,69 @@ export class Chunk {
         waterMat.useVertexColors = true;
         waterMat.emissiveColor = new Color3(0, 0, 0);
         waterMat.diffuseColor = new Color3(1, 1, 1);
-        waterMat.specularColor = new Color3(0.10, 0.10, 0.12); // subtle “surface”
-        waterMat.alpha = 0.82; // ✅ makes it read like water/ice
+        waterMat.specularColor = new Color3(0.12, 0.12, 0.15);
+        waterMat.alpha = 0.72;
         waterMat.backFaceCulling = false;
         water.material = waterMat;
 
-        // ===== height cache (+border) =====
-        const H = Array.from({ length: Chunk.SIZE + 2 }, () => new Array(Chunk.SIZE + 2).fill(0));
+        const surfaceMatrices = [];
+        const surfaceColors = [];
+        const waterMatrices = [];
+        const waterColors = [];
+
+        const pushSurface = (lx, y, lz, c, a = 1) => {
+            const m = Matrix.Compose(
+                new Vector3(GAP_SCALE, GAP_SCALE, GAP_SCALE),
+                Quaternion.Identity(),
+                new Vector3(lx + 0.5, y + 0.5, lz + 0.5)
+            );
+            surfaceMatrices.push(...m.toArray());
+            surfaceColors.push(c.r, c.g, c.b, a);
+        };
+
+        const pushWater = (lx, y, lz, c, a = 1) => {
+            const m = Matrix.Compose(
+                new Vector3(GAP_SCALE, GAP_SCALE, GAP_SCALE),
+                Quaternion.Identity(),
+                new Vector3(lx + 0.5, y + 0.54, lz + 0.5)
+            );
+            waterMatrices.push(...m.toArray());
+            waterColors.push(c.r, c.g, c.b, a);
+        };
+
+        const shade = (c, f) =>
+            new Color3(
+                Math.max(0, Math.min(1, c.r * f)),
+                Math.max(0, Math.min(1, c.g * f)),
+                Math.max(0, Math.min(1, c.b * f))
+            );
+
+        const colorForMaterial = (matId, surfaceBase, depth) => {
+            const d = Math.min(1, depth / 10);
+            switch (matId) {
+                case "bedrock": return shade(new Color3(0.10, 0.12, 0.14), 1.0 - d * 0.08);
+                case "metal": return shade(new Color3(0.46, 0.50, 0.58), 0.90 - d * 0.08);
+                case "ice": return shade(new Color3(0.60, 0.74, 0.92), 0.96 - d * 0.06);
+                case "impact_glass": return shade(new Color3(0.32, 0.34, 0.40), 0.86 - d * 0.08);
+                case "basalt": return shade(new Color3(0.18, 0.20, 0.24), 0.92 - d * 0.10);
+                case "anorthosite": return shade(new Color3(0.44, 0.46, 0.50), 0.94 - d * 0.10);
+                case "regolith":
+                default:
+                    return shade(surfaceBase, 0.72 - d * 0.14);
+            }
+        };
+
+        // Height cache (+border)
+        const H = Array.from({ length: Chunk.SIZE + 2 }, () =>
+            new Array(Chunk.SIZE + 2).fill(0)
+        );
         for (let lx = -1; lx <= Chunk.SIZE; lx++) {
             for (let lz = -1; lz <= Chunk.SIZE; lz++) {
                 const wx = xOffset + lx;
                 const wz = zOffset + lz;
-                const h = getHeight(wx, wz);
-                H[lx + 1][lz + 1] = Number.isFinite(h) ? h : 0;
+                H[lx + 1][lz + 1] = getHeight(wx, wz);
             }
         }
-
-        const q = Quaternion.Identity();
-        const surfMatrices = [];
-        const surfColors = [];
-        const waterMatrices = [];
-        const waterColors = [];
-
-        const pushSurface = (lx, y, lz, c, a = 1.0) => {
-            const m = Matrix.Compose(
-                new Vector3(GAP_SCALE, GAP_SCALE, GAP_SCALE),
-                q,
-                new Vector3(lx, y, lz)
-            );
-            surfMatrices.push(...m.asArray());
-            surfColors.push(c.r, c.g, c.b, a);
-        };
-
-        const pushWater = (lx, y, lz, c, a = 1.0) => {
-            const m = Matrix.Compose(
-                new Vector3(0.94, 1.0, 0.94),
-                q,
-                new Vector3(lx, y + 0.08, lz) // lift slightly so it doesn't z-fight
-            );
-            waterMatrices.push(...m.asArray());
-            waterColors.push(c.r, c.g, c.b, a);
-        };
-
-        const shade = (c, s) => new Color3(c.r * s, c.g * s, c.b * s);
 
         const treeColors = getTreeColors();
 
@@ -132,97 +157,96 @@ export class Chunk {
                 const nN = H[lx + 1][lz + 2];
                 const nS = H[lx + 1][lz + 0];
 
-                const minN = Math.min(nE, nW, nN, nS);
+                const base = getColorForHeight(h, wx, wz);
 
-                // AO based on higher neighbors (subtle)
-                const occluding =
-                    (nE > h ? 1 : 0) +
-                    (nW > h ? 1 : 0) +
-                    (nN > h ? 1 : 0) +
-                    (nS > h ? 1 : 0);
-                const ao = 1.0 - occluding * 0.055;
+                // Slope shading adds depth without geometry cost
+                const slope = Math.max(
+                    Math.abs(h - nE),
+                    Math.abs(h - nW),
+                    Math.abs(h - nN),
+                    Math.abs(h - nS)
+                );
+                const shadeFactor = 1.0 - Math.min(0.40, slope * 0.06);
+                pushSurface(lx, h, lz, shade(base, shadeFactor), 1);
 
-                // slope shading for depth
-                const slope = Math.min(1.0, (h - minN) / 7.0);
-                const slopeShade = 1.0 - slope * 0.12;
-
-                // rim boost (reduced so it won’t look “minty”)
-                const rim = Math.min(1.0, (h - (nE + nW + nN + nS) / 4) / 4.0);
-                const rimBoost = 1.0 + Math.max(0, rim) * 0.035;
-
-                const topShade = ao * slopeShade * rimBoost;
-
-                // ✅ Top color is neutral regolith
-                const topC = getColorForHeight(h, wx, wz);
-                pushSurface(lx, h, lz, shade(topC, topShade));
-
-                // ✅ Side fill uses *topC* (NOT getColorForHeight(y)), so no purple bands ever
-                const drop = h - minN;
-                if (drop > 1) {
-                    const steps = Math.min(MAX_SIDE_FILL, drop - 1);
-                    const sideC = shade(topC, 0.72);
-                    for (let i = 1; i <= steps; i++) {
-                        pushSurface(lx, h - i, lz, sideC);
+                // Cliff skirts (bounded)
+                const fillSkirt = (neighborH, dx, dz) => {
+                    const diff = h - neighborH;
+                    if (diff <= 0) return;
+                    const depth = Math.min(diff, SKIRT_DEPTH);
+                    for (let i = 1; i <= depth; i++) {
+                        const y = h - i;
+                        const matId = getMaterialAt(wx, y, wz);
+                        pushSurface(
+                            lx + dx,
+                            y,
+                            lz + dz,
+                            colorForMaterial(matId, base, i),
+                            1
+                        );
                     }
-                }
+                };
 
-                // Water/ice: only place where low OR on ravine bed
-                const rav = getRavineFactor(wx, wz);
-                const wantsFlow = rav > 0.75 && h <= WATER_LEVEL + 2;
+                fillSkirt(nE, 1, 0);
+                fillSkirt(nW, -1, 0);
+                fillSkirt(nN, 0, 1);
+                fillSkirt(nS, 0, -1);
 
-                if (h <= WATER_LEVEL || wantsFlow) {
+                const biome = getBiomeAt(wx, wz);
+
+                // Ice overlay
+                const iceF = getIceFactor(wx, wz, h);
+                if (iceF > 0.02) {
                     const wc = getWaterColor(wx, wz);
-                    // slightly brighter near ravine center so it reads like “flow”
-                    const flowBoost = 1.0 + Math.max(0, (rav - 0.75)) * 0.10;
-                    pushWater(lx, WATER_LEVEL, lz, shade(wc, flowBoost), 0.82);
+                    pushWater(lx, h, lz, shade(wc, 0.95 + iceF * 0.10), 0.28 + iceF * 0.55);
                 }
 
-                // Objects (optional; keep minimal)
-                if (h > WATER_LEVEL) {
-                    const blocks = getTreeAt(wx, wz, h);
-                    if (blocks && blocks.length) {
-                        for (const b of blocks) {
-                            const localX = b.x - xOffset;
-                            const localZ = b.z - zOffset;
-                            const c = treeColors[b.type] ?? new Color3(0.9, 0.9, 0.9);
-                            pushSurface(localX, b.y, localZ, c);
-                        }
+                // Rivers overlay
+                const riverF = getRiverFactor(wx, wz);
+                if (iceF < 0.22 && riverF > 0.55) {
+                    const wc = getWaterColor(wx, wz);
+
+                    let riverColor = wc;
+                    if (biome.id === "crystalline_plains") {
+                        riverColor = new Color3(Math.min(1, wc.r * 0.5), Math.min(1, wc.g * 0.7), Math.min(1, wc.b * 1.5));
+                    } else if (biome.id === "crimson_desert") {
+                        riverColor = new Color3(Math.min(1, wc.r * 1.25), Math.min(1, wc.g * 0.6), Math.min(1, wc.b * 0.55));
+                    } else if (biome.id === "fungal_marsh") {
+                        riverColor = new Color3(Math.min(1, wc.r * 0.7), Math.min(1, wc.g * 0.5), Math.min(1, wc.b * 1.2));
+                    }
+
+                    pushWater(lx, h, lz, riverColor, 0.78);
+                }
+
+                // Ocean/lake plane
+                if (h <= WATER_LEVEL) {
+                    const wc = getWaterColor(wx, wz);
+                    pushWater(lx, WATER_LEVEL, lz, wc, 0.72);
+                }
+
+                // Objects/POIs
+                const blocks = getTreeAt(wx, wz, h);
+                if (blocks && blocks.length) {
+                    for (const b of blocks) {
+                        const c = treeColors[b.type] ?? new Color3(1, 0, 1);
+                        pushSurface(b.x - xOffset, b.y, b.z - zOffset, c, 1);
                     }
                 }
             }
         }
 
-        const surfCount = surfMatrices.length / 16;
-        if (surfCount > 0) {
-            surface.thinInstanceSetBuffer("matrix", new Float32Array(surfMatrices), 16, false);
-            surface.thinInstanceSetBuffer("instanceColor", new Float32Array(surfColors), 4, false);
-            surface.thinInstanceRefreshBoundingInfo(true);
-            this.surfaceMesh = surface;
-        } else {
-            surface.dispose();
-        }
+        surface.thinInstanceSetBuffer("matrix", surfaceMatrices, 16, true);
+        surface.thinInstanceSetBuffer("color", surfaceColors, 4, true);
 
-        const waterCount = waterMatrices.length / 16;
-        if (waterCount > 0) {
-            water.thinInstanceSetBuffer("matrix", new Float32Array(waterMatrices), 16, false);
-            water.thinInstanceSetBuffer("instanceColor", new Float32Array(waterColors), 4, false);
-            water.thinInstanceRefreshBoundingInfo(true);
-            this.waterMesh = water;
-        } else {
-            water.dispose();
-        }
+        water.thinInstanceSetBuffer("matrix", waterMatrices, 16, true);
+        water.thinInstanceSetBuffer("color", waterColors, 4, true);
+
+        this.surfaceMesh = surface;
+        this.waterMesh = water;
     }
 
     dispose() {
-        if (this.surfaceMesh) {
-            if (this.surfaceMesh.material) this.surfaceMesh.material.dispose();
-            this.surfaceMesh.dispose(false, true);
-            this.surfaceMesh = null;
-        }
-        if (this.waterMesh) {
-            if (this.waterMesh.material) this.waterMesh.material.dispose();
-            this.waterMesh.dispose(false, true);
-            this.waterMesh = null;
-        }
+        if (this.surfaceMesh) this.surfaceMesh.dispose();
+        if (this.waterMesh) this.waterMesh.dispose();
     }
 }

@@ -5,7 +5,9 @@ export class World {
     constructor(scene) {
         this.scene = scene;
         this.chunks = new Map();
-        this.radius = 8;
+
+        // tighter streaming radius so you see points-of-interest faster
+        this.radius = 6;
 
         this._lastCx = null;
         this._lastCz = null;
@@ -21,20 +23,21 @@ export class World {
 
         const needed = new Set();
 
-        // SQUARE chunk load (no circular mask)
-        for (let dx = -this.radius; dx <= this.radius; dx++) {
-            for (let dz = -this.radius; dz <= this.radius; dz++) {
-                const ncx = cx + dx;
-                const ncz = cz + dz;
-                const key = `${ncx},${ncz}`;
+        for (let dz = -this.radius; dz <= this.radius; dz++) {
+            for (let dx = -this.radius; dx <= this.radius; dx++) {
+                const nx = cx + dx;
+                const nz = cz + dz;
+                const key = `${nx},${nz}`;
                 needed.add(key);
 
                 if (!this.chunks.has(key)) {
-                    this.chunks.set(key, new Chunk(ncx, ncz, this.scene));
+                    const ch = new Chunk(nx, nz, this.scene);
+                    this.chunks.set(key, ch);
                 }
             }
         }
 
+        // Dispose chunks not needed
         for (const [key, chunk] of this.chunks.entries()) {
             if (!needed.has(key)) {
                 chunk.dispose();

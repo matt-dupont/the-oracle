@@ -24,10 +24,10 @@ export class Person {
         this.t = 0;
 
         // Collision tuning
-        this.radius = 0.28;     // footprint
+        this.radius = 0.35;     // footprint
         this.stepUp = 1.0;      // max step climb
         this.stepDown = 2.0;    // slow near cliffs
-        this.yOffset = 0.46;    // stand height
+        this.yOffset = 0.58;    // stand height
 
         this._buildMesh();
 
@@ -45,34 +45,34 @@ export class Person {
         // Slight “astronaut tech” gray
         mat.diffuseColor = new Color3(0.7, 0.7, 0.75);
 
-        const body = MeshBuilder.CreateBox("body", { width: 0.42, height: 0.62, depth: 0.22 }, this.scene);
+        const body = MeshBuilder.CreateBox("body", { width: 0.53, height: 0.78, depth: 0.28 }, this.scene);
         body.parent = this.root;
-        body.position.y = 0.72;
+        body.position.y = 0.90;
         body.material = mat;
 
-        const head = MeshBuilder.CreateBox("head", { size: 0.26 }, this.scene);
+        const head = MeshBuilder.CreateBox("head", { size: 0.33 }, this.scene);
         head.parent = this.root;
-        head.position.y = 1.12;
+        head.position.y = 1.40;
         head.material = mat;
 
-        this.leftLeg = MeshBuilder.CreateBox("leftLeg", { width: 0.16, height: 0.44, depth: 0.16 }, this.scene);
+        this.leftLeg = MeshBuilder.CreateBox("leftLeg", { width: 0.20, height: 0.55, depth: 0.20 }, this.scene);
         this.leftLeg.parent = this.root;
-        this.leftLeg.position.set(-0.11, 0.22, 0);
+        this.leftLeg.position.set(-0.14, 0.28, 0);
         this.leftLeg.material = mat;
 
-        this.rightLeg = MeshBuilder.CreateBox("rightLeg", { width: 0.16, height: 0.44, depth: 0.16 }, this.scene);
+        this.rightLeg = MeshBuilder.CreateBox("rightLeg", { width: 0.20, height: 0.55, depth: 0.20 }, this.scene);
         this.rightLeg.parent = this.root;
-        this.rightLeg.position.set(0.11, 0.22, 0);
+        this.rightLeg.position.set(0.14, 0.28, 0);
         this.rightLeg.material = mat;
 
-        this.leftArm = MeshBuilder.CreateBox("leftArm", { width: 0.11, height: 0.42, depth: 0.11 }, this.scene);
+        this.leftArm = MeshBuilder.CreateBox("leftArm", { width: 0.14, height: 0.53, depth: 0.14 }, this.scene);
         this.leftArm.parent = this.root;
-        this.leftArm.position.set(-0.30, 0.72, 0);
+        this.leftArm.position.set(-0.38, 0.90, 0);
         this.leftArm.material = mat;
 
-        this.rightArm = MeshBuilder.CreateBox("rightArm", { width: 0.11, height: 0.42, depth: 0.11 }, this.scene);
+        this.rightArm = MeshBuilder.CreateBox("rightArm", { width: 0.14, height: 0.53, depth: 0.14 }, this.scene);
         this.rightArm.parent = this.root;
-        this.rightArm.position.set(0.30, 0.72, 0);
+        this.rightArm.position.set(0.38, 0.90, 0);
         this.rightArm.material = mat;
     }
 
