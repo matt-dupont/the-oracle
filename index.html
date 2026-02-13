@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Babylon Voxel Prototype</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #050505;
+        font-family: 'Courier New', Courier, monospace;
+      }
+      #renderCanvas {
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+        /* Temporarily removed filters to isolate the black terrain issue */
+        /* filter: contrast(1.2) brightness(1.2) saturate(1.1); */
+      }
+      #ui-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        color: #00f2ff;
+        border: 2px solid rgba(0, 242, 255, 0.1);
+        box-sizing: border-box;
+      }
+      
+      /* Top Bar */
+      .top-nav {
+        display: flex;
+        justify-content: space-between;
+        padding: 15px 40px;
+        background: rgba(0, 10, 15, 0.85);
+        border-bottom: 2px solid #00f2ff;
+        box-shadow: 0 5px 20px rgba(0, 242, 255, 0.2);
+        pointer-events: auto;
+      }
+      .stat-group {
+        display: flex;
+        gap: 30px;
+      }
+      .stat {
+        font-size: 12px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+      }
+      .stat span {
+        font-weight: bold;
+        color: #fff;
+        text-shadow: 0 0 8px #00f2ff;
+      }
+
+      /* Command Center (Bottom Area) */
+      .command-center {
+        padding: 30px 40px;
+        background: rgba(0, 10, 15, 0.9);
+        border-top: 2px solid #00f2ff;
+        box-shadow: 0 -5px 20px rgba(0, 242, 255, 0.2);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        pointer-events: auto;
+      }
+
+      .command-bar-wrapper {
+        width: 600px;
+        background: rgba(0, 0, 0, 0.8);
+        border: 1px solid #00f2ff;
+        box-shadow: 0 0 20px rgba(0, 242, 255, 0.2), inset 0 0 10px rgba(0, 242, 255, 0.1);
+        display: flex;
+        padding: 5px;
+        position: relative;
+      }
+      .command-bar-wrapper::before {
+        content: 'FACTION COMMAND';
+        position: absolute;
+        top: -18px;
+        left: 10px;
+        font-size: 10px;
+        background: #00f2ff;
+        color: #000;
+        padding: 0 5px;
+        font-weight: bold;
+      }
+
+      #command-input {
+        flex-grow: 1;
+        background: transparent;
+        border: none;
+        color: #fff;
+        padding: 10px 15px;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 16px;
+        outline: none;
+      }
+      #command-input::placeholder {
+        color: rgba(0, 242, 255, 0.4);
+      }
+
+      .action-cluster {
+        display: flex;
+        gap: 10px;
+      }
+      .btn-hex {
+        background: rgba(0, 242, 255, 0.1);
+        border: 1px solid #00f2ff;
+        color: #00f2ff;
+        padding: 8px 20px;
+        font-size: 11px;
+        font-weight: bold;
+        cursor: pointer;
+        text-transform: uppercase;
+        clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%);
+        transition: all 0.3s;
+      }
+      .btn-hex:hover {
+        background: #00f2ff;
+        color: #000;
+        box-shadow: 0 0 15px #00f2ff;
+      }
+
+      /* Console Output Overlay */
+      .console-overlay {
+        position: absolute;
+        left: 20px;
+        bottom: 120px;
+        width: 300px;
+        max-height: 200px;
+        overflow: hidden;
+        font-size: 11px;
+        color: rgba(0, 242, 255, 0.7);
+        display: flex;
+        flex-direction: column-reverse;
+      }
+      .console-line {
+        margin-bottom: 4px;
+        border-left: 2px solid #00f2ff;
+        padding-left: 8px;
+        animation: fadein 0.3s ease-out;
+      }
+      @keyframes fadein {
+        from { opacity: 0; transform: translateX(-10px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="renderCanvas"></canvas>
+    
+    <div id="ui-container">
+      <div class="top-nav">
+        <div class="stat-group">
+          <div class="stat">Credits <span>2,400</span></div>
+          <div class="stat">Energy <span>88%</span></div>
+        </div>
+        <div class="stat-group">
+          <div class="stat">Population <span>20</span></div>
+          <div class="stat">Sector <span>7-G</span></div>
+        </div>
+      </div>
+
+      <div class="console-overlay" id="console">
+        <div class="console-line">> Neural link established...</div>
+        <div class="console-line">> Voxel core online...</div>
+      </div>
+
+      <div class="command-center">
+        <div class="action-cluster">
+          <button class="btn-hex">Scan</button>
+          <button class="btn-hex">Extract</button>
+          <button class="btn-hex">Deploy</button>
+        </div>
+        <div class="command-bar-wrapper">
+          <input type="text" id="command-input" placeholder="ENTER COMMAND TO FACTION AI..." autocomplete="off">
+        </div>
+      </div>
+    </div>
+    <script>
+      const consoleEl = document.getElementById('console');
+      const inputEl = document.getElementById('command-input');
+
+      function addConsoleLine(text) {
+        const line = document.createElement('div');
+        line.className = 'console-line';
+        line.textContent = `> ${text}`;
+        consoleEl.prepend(line);
+        // Keep only last 10 lines
+        while (consoleEl.children.length > 10) {
+          consoleEl.removeChild(consoleEl.lastChild);
+        }
+      }
+
+      inputEl.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && inputEl.value.trim()) {
+          const cmd = inputEl.value.trim().toUpperCase();
+          addConsoleLine(`Executing: ${cmd}`);
+          
+          // Simulated AI response
+          setTimeout(() => {
+            if (cmd === 'SCAN') {
+              addConsoleLine('Scanning sector 7-G... No anomalies detected.');
+            } else if (cmd === 'EXTRACT') {
+              addConsoleLine('Extractor drones deployed to coordinates...');
+            } else if (cmd === 'DEPLOY') {
+              addConsoleLine('Unit deployment sequence initiated.');
+            } else {
+              addConsoleLine(`Accessing neural archives for: ${cmd}...`);
+              setTimeout(() => addConsoleLine('Command acknowledged. Processing...'), 500);
+            }
+          }, 400);
+          
+          inputEl.value = '';
+        }
+      });
+
+      // Hook up buttons
+      document.querySelectorAll('.btn-hex').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const cmd = btn.textContent.toUpperCase();
+          addConsoleLine(`Button Trigger: ${cmd}`);
+          setTimeout(() => addConsoleLine(`Executing internal protocol ${cmd}_01...`), 300);
+        });
+      });
+    </script>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

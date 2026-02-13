@@ -1,0 +1,164 @@
+Junie Prompt (Babylon.js + Vite + JavaScript)
+
+You are building a minimal top-down chunked voxel prototype using Babylon.js.
+
+Goal: A running demo that shows:
+
+An infinite-feeling chunked terrain made of colored cubes (Minecraft-like)
+
+A pure black void background
+
+A fixed top-down camera with pan + zoom
+
+Several simple procedural “people” made of cubes/tubes that wander and “walk” (sine-wave limb motion)
+
+Hard constraints:
+
+JavaScript only (NO TypeScript)
+
+Babylon.js only (no extra libs except Vite)
+
+NO textures
+
+NO physics engine
+
+NO character animation assets / skeletons
+
+Keep code minimal, readable, and working-first
+
+Tech Stack
+
+Vite (vanilla JS)
+
+Babylon.js (ESM import)
+
+Project Structure
+src/
+  main.js                 // boot Vite + canvas + scene start
+  scene.js                // create engine/scene/camera/light, game loop
+  world/
+    World.js              // manages chunk loading/unloading around camera
+    Chunk.js              // chunk generation + mesh creation/disposal
+    terrain.js            // deterministic height function + color bands
+  entities/
+    Person.js             // procedural person mesh + wander + walk motion
+  util/
+    rng.js                // deterministic seeded RNG
+    hash.js               // simple 2D hash/noise helper
+
+Visual Style
+
+Clear color cubes on a black void
+
+Use Babylon materials with flat colors (StandardMaterial)
+
+Slight gaps between cubes: scale cubes to 0.95 or use spacing
+
+No skybox, no fog
+
+Background black: scene.clearColor = new Color4(0,0,0,1)
+
+Camera Controls
+
+Use an ArcRotateCamera configured for a “top-down but slightly angled” look:
+
+Target moves across the world (panning)
+
+Wheel zooms in/out
+
+Disable rotation input OR clamp rotation tightly so it stays top-down
+
+WASD pans the target (or camera position) in X/Z
+
+Chunked Terrain Requirements
+
+World is split into square chunks: 16×16 columns
+
+Terrain is generated via a deterministic heightmap function height(x,z)
+
+For each (x,z), build a vertical stack of cubes from y=0..h
+
+BUT for performance, initially render only:
+
+the top cube at (x, h, z)
+
+optionally a few side cubes if height difference is large (optional, skip if needed)
+
+Color bands (example):
+
+low: dark blue/purple
+
+mid: teal/green
+
+high: yellow/orange
+Pick a clean palette—no textures.
+
+Performance rules:
+
+Do NOT create one Babylon mesh per cube.
+
+Use thin instances of a single box mesh per chunk OR use a merged mesh per chunk.
+
+Prefer thin instances for simplicity and speed.
+
+Each chunk should:
+
+create a base box mesh (hidden) and thin-instance it for all visible cubes in that chunk
+
+store instance matrices + per-instance color (Babylon supports thin instance color buffers)
+
+dispose cleanly when unloaded
+
+World Streaming
+
+Keep chunks loaded within a radius around the camera target (e.g. radius = 6 chunks)
+
+On update (every ~200ms), recompute needed chunks
+
+Create missing chunks, unload far chunks
+
+Procedural People
+
+Spawn ~10 “people” near origin.
+
+Each person is a TransformNode root with child meshes:
+
+body: box
+
+head: small box
+
+arms: thin cylinders (left/right)
+
+legs: thin cylinders (left/right)
+
+Walking animation (no skeleton):
+
+legs swing opposite each other using sine wave based on speed/time
+
+arms swing opposite legs
+
+Wander behavior:
+
+pick a random direction
+
+move forward for a few seconds
+
+occasionally turn
+
+keep them on the surface by sampling terrain height at their x/z and setting y = height + offset
+
+Deliverable
+
+npm install, npm run dev starts the app
+
+On load, it immediately shows:
+
+black background
+
+colored cube terrain streaming in chunks as you pan
+
+multiple simple “people” walking around
+
+Do not add extra features. Do not over-architect. Get it running first.
+
+Start by scaffolding the Vite project and implementing each file in the structure above. Include clear comments where needed, but keep code tight.
