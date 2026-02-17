@@ -1,237 +1,554 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Babylon Voxel Prototype</title>
-    <style>
-      body {
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        background-color: #050505;
-        font-family: 'Courier New', Courier, monospace;
-      }
-      #renderCanvas {
-        width: 100%;
-        height: 100%;
-        touch-action: none;
-        /* Temporarily removed filters to isolate the black terrain issue */
-        /* filter: contrast(1.2) brightness(1.2) saturate(1.1); */
-      }
-      #ui-container {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        color: #00f2ff;
-        border: 2px solid rgba(0, 242, 255, 0.1);
-        box-sizing: border-box;
-      }
-      
-      /* Top Bar */
-      .top-nav {
-        display: flex;
-        justify-content: space-between;
-        padding: 15px 40px;
-        background: rgba(0, 10, 15, 0.85);
-        border-bottom: 2px solid #00f2ff;
-        box-shadow: 0 5px 20px rgba(0, 242, 255, 0.2);
-        pointer-events: auto;
-      }
-      .stat-group {
-        display: flex;
-        gap: 30px;
-      }
-      .stat {
-        font-size: 12px;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-      }
-      .stat span {
-        font-weight: bold;
-        color: #fff;
-        text-shadow: 0 0 8px #00f2ff;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Oracle</title>
 
-      /* Command Center (Bottom Area) */
-      .command-center {
-        padding: 30px 40px;
-        background: rgba(0, 10, 15, 0.9);
-        border-top: 2px solid #00f2ff;
-        box-shadow: 0 -5px 20px rgba(0, 242, 255, 0.2);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 20px;
-        pointer-events: auto;
-      }
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #050505;
+      font-family: "Courier New", Courier, monospace;
+    }
 
-      .command-bar-wrapper {
-        width: 600px;
-        background: rgba(0, 0, 0, 0.8);
-        border: 1px solid #00f2ff;
-        box-shadow: 0 0 20px rgba(0, 242, 255, 0.2), inset 0 0 10px rgba(0, 242, 255, 0.1);
-        display: flex;
-        padding: 5px;
-        position: relative;
-      }
-      .command-bar-wrapper::before {
-        content: 'FACTION COMMAND';
-        position: absolute;
-        top: -18px;
-        left: 10px;
-        font-size: 10px;
-        background: #00f2ff;
-        color: #000;
-        padding: 0 5px;
-        font-weight: bold;
-      }
+    #renderCanvas {
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      display: block;
+    }
 
-      #command-input {
-        flex-grow: 1;
-        background: transparent;
-        border: none;
-        color: #fff;
-        padding: 10px 15px;
-        font-family: 'Courier New', Courier, monospace;
-        font-size: 16px;
-        outline: none;
-      }
-      #command-input::placeholder {
-        color: rgba(0, 242, 255, 0.4);
-      }
+    #ui-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      color: #00f2ff;
+      border: 2px solid rgba(0, 242, 255, 0.1);
+      box-sizing: border-box;
+      z-index: 10;
+    }
 
-      .action-cluster {
-        display: flex;
-        gap: 10px;
-      }
-      .btn-hex {
-        background: rgba(0, 242, 255, 0.1);
-        border: 1px solid #00f2ff;
-        color: #00f2ff;
-        padding: 8px 20px;
-        font-size: 11px;
-        font-weight: bold;
-        cursor: pointer;
-        text-transform: uppercase;
-        clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%);
-        transition: all 0.3s;
-      }
-      .btn-hex:hover {
-        background: #00f2ff;
-        color: #000;
-        box-shadow: 0 0 15px #00f2ff;
-      }
+    .top-nav {
+      display: flex;
+      justify-content: space-between;
+      padding: 15px 40px;
+      background: rgba(0, 10, 15, 0.85);
+      border-bottom: 2px solid #00f2ff;
+      box-shadow: 0 5px 20px rgba(0, 242, 255, 0.2);
+      pointer-events: auto;
+    }
 
-      /* Console Output Overlay */
-      .console-overlay {
-        position: absolute;
-        left: 20px;
-        bottom: 120px;
-        width: 300px;
-        max-height: 200px;
-        overflow: hidden;
-        font-size: 11px;
-        color: rgba(0, 242, 255, 0.7);
-        display: flex;
-        flex-direction: column-reverse;
-      }
-      .console-line {
-        margin-bottom: 4px;
-        border-left: 2px solid #00f2ff;
-        padding-left: 8px;
-        animation: fadein 0.3s ease-out;
-      }
-      @keyframes fadein {
-        from { opacity: 0; transform: translateX(-10px); }
-        to { opacity: 1; transform: translateX(0); }
-      }
-    </style>
-  </head>
-  <body>
-    <canvas id="renderCanvas"></canvas>
-    
-    <div id="ui-container">
-      <div class="top-nav">
-        <div class="stat-group">
-          <div class="stat">Credits <span>2,400</span></div>
-          <div class="stat">Energy <span>88%</span></div>
+    .stat-group { display: flex; gap: 30px; }
+    .stat { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+    .stat span { font-weight: bold; color: #fff; text-shadow: 0 0 8px #00f2ff; }
+
+    .command-center {
+      padding: 30px 40px;
+      background: rgba(0, 10, 15, 0.9);
+      border-top: 2px solid #00f2ff;
+      box-shadow: 0 -5px 20px rgba(0, 242, 255, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      pointer-events: auto;
+    }
+
+    .command-bar-wrapper {
+      width: 600px;
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid #00f2ff;
+      box-shadow: 0 0 20px rgba(0, 242, 255, 0.2),
+      inset 0 0 10px rgba(0, 242, 255, 0.1);
+      display: flex;
+      padding: 5px;
+      position: relative;
+    }
+
+    .command-bar-wrapper::before {
+      content: "FACTION COMMAND";
+      position: absolute;
+      top: -18px;
+      left: 10px;
+      font-size: 10px;
+      background: #00f2ff;
+      color: #000;
+      padding: 0 5px;
+      font-weight: bold;
+    }
+
+    #command-input {
+      flex-grow: 1;
+      background: transparent;
+      border: none;
+      color: #fff;
+      padding: 10px 15px;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 16px;
+      outline: none;
+    }
+
+    #command-input::placeholder { color: rgba(0, 242, 255, 0.4); }
+
+    .action-cluster {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn-hex {
+      background: rgba(0, 242, 255, 0.1);
+      border: 1px solid #00f2ff;
+      color: #00f2ff;
+      padding: 8px 20px;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: pointer;
+      text-transform: uppercase;
+      clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%);
+      transition: all 0.3s;
+    }
+
+    .btn-hex:hover {
+      background: #00f2ff;
+      color: #000;
+      box-shadow: 0 0 15px #00f2ff;
+    }
+
+    .btnWide { min-width: 220px; padding: 10px 22px; }
+
+    .console-overlay {
+      position: absolute;
+      left: 20px;
+      bottom: 120px;
+      width: 320px;
+      max-height: 240px;
+      overflow: hidden;
+      font-size: 11px;
+      color: rgba(0, 242, 255, 0.7);
+      display: flex;
+      flex-direction: column-reverse;
+      pointer-events: none;
+    }
+
+    .console-line {
+      margin-bottom: 4px;
+      border-left: 2px solid #00f2ff;
+      padding-left: 8px;
+      animation: fadein 0.3s ease-out;
+    }
+
+    @keyframes fadein {
+      from { opacity: 0; transform: translateX(-10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* TITLE SCREEN */
+    #titleScreen {
+      position: absolute;
+      inset: 0;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      background:
+              radial-gradient(circle at center, rgba(0, 20, 28, 0.45), rgba(0, 0, 0, 0.92)),
+              url("/title-screen.jpg");
+      background-size: cover;
+      background-position: center;
+      opacity: 1;
+      transition: opacity 350ms ease;
+    }
+
+    .titlePanel {
+      width: 760px;
+      max-width: calc(100vw - 80px);
+      border: 1px solid rgba(0, 242, 255, 0.65);
+      box-shadow: 0 0 22px rgba(0, 242, 255, 0.25),
+      inset 0 0 12px rgba(0, 242, 255, 0.12);
+      background: rgba(0, 10, 15, 0.75);
+      padding: 22px;
+    }
+
+    .titleRow {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 14px;
+    }
+
+    .gameTitle {
+      font-size: 14px;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      color: #00f2ff;
+    }
+
+    .gameSub {
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: rgba(255, 255, 255, 0.7);
+      text-transform: uppercase;
+    }
+
+    /* NEW GAME SETTINGS PANEL (hidden until New Game click) */
+    #newGamePanel {
+      display: none;
+      margin-top: 14px;
+      border-top: 1px solid rgba(0, 242, 255, 0.25);
+      padding-top: 14px;
+    }
+
+    .settingsGrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px 18px;
+      margin-top: 14px;
+    }
+
+    .setting {
+      border: 1px solid rgba(0, 242, 255, 0.25);
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.35);
+    }
+
+    .setting label {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(0, 242, 255, 0.85);
+      margin-bottom: 8px;
+    }
+
+    .setting .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .setting input[type="range"] { width: 100%; }
+
+    .setting .val {
+      width: 52px;
+      text-align: right;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.85);
+    }
+
+    .titleActions {
+      margin-top: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* LOADING OVERLAY */
+    #loading {
+      position: absolute;
+      inset: 0;
+      z-index: 45;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      background: radial-gradient(circle at center, rgba(0, 20, 28, 0.92), rgba(0, 0, 0, 0.98));
+      opacity: 1;
+      transition: opacity 400ms ease;
+    }
+
+    .loading-panel {
+      width: 560px;
+      max-width: calc(100vw - 80px);
+      border: 1px solid rgba(0, 242, 255, 0.65);
+      box-shadow: 0 0 22px rgba(0, 242, 255, 0.25),
+      inset 0 0 12px rgba(0, 242, 255, 0.12);
+      background: rgba(0, 10, 15, 0.7);
+      padding: 22px 22px 18px;
+    }
+
+    .loading-title {
+      font-size: 12px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      color: #00f2ff;
+    }
+
+    .loading-text {
+      font-size: 12px;
+      letter-spacing: 2px;
+      color: rgba(255, 255, 255, 0.85);
+      margin-bottom: 14px;
+    }
+
+    .loading-bar-shell {
+      height: 10px;
+      border: 1px solid rgba(0, 242, 255, 0.55);
+      background: rgba(0, 0, 0, 0.75);
+      box-shadow: inset 0 0 10px rgba(0, 242, 255, 0.1);
+      overflow: hidden;
+    }
+
+    .loading-bar {
+      height: 100%;
+      width: 0%;
+      background: rgba(0, 242, 255, 0.55);
+      box-shadow: 0 0 16px rgba(0, 242, 255, 0.45);
+      transition: width 120ms linear;
+    }
+  </style>
+</head>
+
+<body>
+<canvas id="renderCanvas"></canvas>
+
+<!-- TITLE -->
+<div id="titleScreen">
+  <div class="titlePanel">
+    <div class="titleRow">
+      <div class="gameTitle">THE ORACLE</div>
+      <div class="gameSub">Voxel Command Prototype</div>
+    </div>
+
+    <div class="titleActions">
+      <button class="btn-hex btnWide" id="btnNewGame">New Game</button>
+      <div class="gameSub" id="titleHint">Place /public/title-screen.jpg</div>
+    </div>
+
+    <!-- Hidden until clicking New Game -->
+    <div id="newGamePanel">
+      <div class="gameSub">NEW GAME SETUP</div>
+
+      <div class="settingsGrid">
+        <div class="setting">
+          <label>Right-Click Drag Speed</label>
+          <div class="row">
+            <input id="s_rightDrag" type="range" min="120" max="1200" step="10" value="260" />
+            <div class="val" id="v_rightDrag">260</div>
+          </div>
         </div>
-        <div class="stat-group">
-          <div class="stat">Population <span>20</span></div>
-          <div class="stat">Sector <span>7-G</span></div>
+
+        <div class="setting">
+          <label>Wheel Zoom Speed</label>
+          <div class="row">
+            <input id="s_wheel" type="range" min="1.2" max="5.0" step="0.1" value="2.2" />
+            <div class="val" id="v_wheel">2.2</div>
+          </div>
+        </div>
+
+        <div class="setting">
+          <label>Mouse Pan Sensibility</label>
+          <div class="row">
+            <input id="s_panSens" type="range" min="400" max="2200" step="25" value="1200" />
+            <div class="val" id="v_panSens">1200</div>
+          </div>
+        </div>
+
+        <div class="setting">
+          <label>WASD Pan Speed</label>
+          <div class="row">
+            <input id="s_wasd" type="range" min="120" max="520" step="10" value="220" />
+            <div class="val" id="v_wasd">220</div>
+          </div>
+        </div>
+
+        <div class="setting">
+          <label>Map Size (Chunks)</label>
+          <div class="row">
+            <input id="s_map" type="range" min="25" max="71" step="2" value="41" />
+            <div class="val" id="v_map">41</div>
+          </div>
+        </div>
+
+        <div class="setting">
+          <label>Vision Radius (Voxels)</label>
+          <div class="row">
+            <input id="s_vision" type="range" min="60" max="320" step="10" value="170" />
+            <div class="val" id="v_vision">170</div>
+          </div>
+        </div>
+
+        <div class="setting">
+          <label>Generation Budget</label>
+          <div class="row">
+            <input id="s_budget" type="range" min="20" max="160" step="2" value="80" />
+            <div class="val" id="v_budget">80</div>
+          </div>
+        </div>
+
+        <div class="setting">
+          <label>Starter Builders</label>
+          <div class="row">
+            <input id="s_builders" type="range" min="2" max="18" step="1" value="6" />
+            <div class="val" id="v_builders">6</div>
+          </div>
         </div>
       </div>
 
-      <div class="console-overlay" id="console">
-        <div class="console-line">> Neural link established...</div>
-        <div class="console-line">> Voxel core online...</div>
-      </div>
-
-      <div class="command-center">
-        <div class="action-cluster">
-          <button class="btn-hex">Scan</button>
-          <button class="btn-hex">Extract</button>
-          <button class="btn-hex">Deploy</button>
-        </div>
-        <div class="command-bar-wrapper">
-          <input type="text" id="command-input" placeholder="ENTER COMMAND TO FACTION AI..." autocomplete="off">
-        </div>
+      <div class="titleActions">
+        <button class="btn-hex btnWide" id="btnStart">Start</button>
+        <button class="btn-hex btnWide" id="btnBack">Back</button>
       </div>
     </div>
-    <script>
-      const consoleEl = document.getElementById('console');
-      const inputEl = document.getElementById('command-input');
+  </div>
+</div>
 
-      function addConsoleLine(text) {
-        const line = document.createElement('div');
-        line.className = 'console-line';
-        line.textContent = `> ${text}`;
-        consoleEl.prepend(line);
-        // Keep only last 10 lines
-        while (consoleEl.children.length > 10) {
-          consoleEl.removeChild(consoleEl.lastChild);
-        }
-      }
+<!-- LOADING -->
+<div id="loading">
+  <div class="loading-panel">
+    <div class="loading-title">ORACLE SYSTEM</div>
+    <div class="loading-text" id="loading-text">INITIALIZING VOXEL CORE...</div>
+    <div class="loading-bar-shell">
+      <div class="loading-bar" id="loading-bar"></div>
+    </div>
+  </div>
+</div>
 
-      inputEl.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && inputEl.value.trim()) {
-          const cmd = inputEl.value.trim().toUpperCase();
-          addConsoleLine(`Executing: ${cmd}`);
-          
-          // Simulated AI response
-          setTimeout(() => {
-            if (cmd === 'SCAN') {
-              addConsoleLine('Scanning sector 7-G... No anomalies detected.');
-            } else if (cmd === 'EXTRACT') {
-              addConsoleLine('Extractor drones deployed to coordinates...');
-            } else if (cmd === 'DEPLOY') {
-              addConsoleLine('Unit deployment sequence initiated.');
-            } else {
-              addConsoleLine(`Accessing neural archives for: ${cmd}...`);
-              setTimeout(() => addConsoleLine('Command acknowledged. Processing...'), 500);
-            }
-          }, 400);
-          
-          inputEl.value = '';
-        }
-      });
+<!-- YOUR UI (UNCHANGED) -->
+<div id="ui-container">
+  <div class="top-nav">
+    <div class="stat-group">
+      <div class="stat">Credits <span>2,400</span></div>
+      <div class="stat">Energy <span>88%</span></div>
+    </div>
+    <div class="stat-group">
+      <div class="stat">Population <span>20</span></div>
+      <div class="stat">Sector <span>7-G</span></div>
+    </div>
+  </div>
 
-      // Hook up buttons
-      document.querySelectorAll('.btn-hex').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const cmd = btn.textContent.toUpperCase();
-          addConsoleLine(`Button Trigger: ${cmd}`);
-          setTimeout(() => addConsoleLine(`Executing internal protocol ${cmd}_01...`), 300);
-        });
-      });
-    </script>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+  <div class="console-overlay" id="console">
+    <div class="console-line">> Neural link established...</div>
+    <div class="console-line">> Voxel core online...</div>
+  </div>
+
+  <div class="command-center">
+    <div class="action-cluster">
+      <button class="btn-hex" data-cmd="SCAN">Scan</button>
+      <button class="btn-hex" data-cmd="EXTRACT">Extract</button>
+      <button class="btn-hex" data-cmd="DEPLOY">Deploy</button>
+    </div>
+
+    <div class="command-bar-wrapper">
+      <input
+              type="text"
+              id="command-input"
+              placeholder="ENTER COMMAND TO FACTION AI..."
+              autocomplete="off"
+      />
+    </div>
+  </div>
+</div>
+
+<script>
+  // Console behavior (unchanged)
+  const consoleEl = document.getElementById("console");
+  const inputEl = document.getElementById("command-input");
+
+  function addConsoleLine(text) {
+    const line = document.createElement("div");
+    line.className = "console-line";
+    line.textContent = `> ${text}`;
+    consoleEl.prepend(line);
+    while (consoleEl.children.length > 10) consoleEl.removeChild(consoleEl.lastChild);
+  }
+
+  inputEl.addEventListener("keypress", (e) => {
+    if (e.key === "Enter" && inputEl.value.trim()) {
+      const cmd = inputEl.value.trim().toUpperCase();
+      addConsoleLine(`Executing: ${cmd}`);
+      setTimeout(() => addConsoleLine("Command acknowledged. Processing..."), 450);
+      inputEl.value = "";
+    }
+  });
+
+  document.querySelectorAll(".btn-hex[data-cmd]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const cmd = btn.getAttribute("data-cmd");
+      addConsoleLine(`Button Trigger: ${cmd}`);
+    });
+  });
+
+  const title = document.getElementById("titleScreen");
+  const loading = document.getElementById("loading");
+  const newGamePanel = document.getElementById("newGamePanel");
+
+  const fields = [
+    ["rightDrag", "s_rightDrag", "v_rightDrag"],
+    ["wheel", "s_wheel", "v_wheel"],
+    ["panSens", "s_panSens", "v_panSens"],
+    ["wasd", "s_wasd", "v_wasd"],
+    ["mapChunks", "s_map", "v_map"],
+    ["visionRadius", "s_vision", "v_vision"],
+    ["budgetBoot", "s_budget", "v_budget"],
+    ["builders", "s_builders", "v_builders"],
+  ];
+
+  function readSettings() {
+    const get = (id) => document.getElementById(id);
+    return {
+      rightDrag: Number(get("s_rightDrag").value),
+      wheel: Number(get("s_wheel").value),
+      panSens: Number(get("s_panSens").value),
+      wasd: Number(get("s_wasd").value),
+      mapChunks: Number(get("s_map").value),
+      visionRadius: Number(get("s_vision").value),
+      budgetBoot: Number(get("s_budget").value),
+      builders: Number(get("s_builders").value),
+    };
+  }
+
+  function updateLabels() {
+    for (const [_, sliderId, valId] of fields) {
+      const s = document.getElementById(sliderId);
+      const v = document.getElementById(valId);
+      if (s && v) v.textContent = String(s.value);
+    }
+  }
+
+  fields.forEach(([_, sliderId]) => {
+    const s = document.getElementById(sliderId);
+    if (s) s.addEventListener("input", updateLabels);
+  });
+  updateLabels();
+
+  document.getElementById("btnNewGame").addEventListener("click", () => {
+    newGamePanel.style.display = "block";
+  });
+
+  document.getElementById("btnBack").addEventListener("click", () => {
+    newGamePanel.style.display = "none";
+  });
+
+  document.getElementById("btnStart").addEventListener("click", () => {
+    const settings = readSettings();
+    window.__ORACLE_SETTINGS__ = settings;
+
+    loading.style.display = "flex";
+    loading.style.opacity = "1";
+
+    title.style.opacity = "0";
+    setTimeout(() => { title.style.display = "none"; }, 360);
+
+    window.dispatchEvent(new CustomEvent("oracle:newgame", { detail: settings }));
+  });
+</script>
+
+<script type="module" src="/src/main.js"></script>
+</body>
 </html>

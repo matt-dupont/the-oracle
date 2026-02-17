@@ -1,9 +1,4 @@
 // src/world/Chunk.js
-// PERF-focused chunk rendering:
-// - Surface blocks only
-// - Limited cliff skirts (bounded)
-// - Water/ice overlays
-// This keeps movement/loading smooth.
 
 import {
     MeshBuilder,
@@ -30,15 +25,59 @@ import { getTreeAt, getTreeColors } from "./objects.js";
 export class Chunk {
     static SIZE = 16;
 
-    constructor(cx, cz, scene) {
+    /**
+     * @param {number} cx
+     * @param {number} cz
+     * @param {import('@babylonjs/core').Scene} scene
+     * @param {{minWorldX:number,maxWorldX:number,minWorldZ:number,maxWorldZ:number}} [bounds]
+     */
+    constructor(cx, cz, scene, bounds) {
         this.cx = cx;
         this.cz = cz;
         this.scene = scene;
+        this.bounds = bounds ?? null;
 
         this.surfaceMesh = null;
         this.waterMesh = null;
 
+        this._fade = 1;
+
         this._generate();
+    }
+
+    /**
+     * Hard show/hide (used by systems that don't need soft falloff).
+     * @param {boolean} v
+     */
+    setVisible(v) {
+        if (this.surfaceMesh) this.surfaceMesh.isVisible = v;
+        if (this.waterMesh) this.waterMesh.isVisible = v;
+    }
+
+    /**
+     * Soft fade 0..1 (Diablo-style darkness falloff).
+     * NOTE: this uses mesh.visibility (alpha multiplier).
+     * @param {number} f
+     */
+    setFade(f) {
+        const ff = Math.max(0, Math.min(1, f));
+
+        // avoid thrashing
+        if (Math.abs(ff - this._fade) < 0.01) return;
+        this._fade = ff;
+
+        const shown = ff > 0.02;
+
+        if (this.surfaceMesh) {
+            this.surfaceMesh.isVisible = shown;
+            this.surfaceMesh.visibility = ff;
+        }
+        if (this.waterMesh) {
+            // water should fade a bit faster so it doesn't glow weirdly
+            const wf = Math.max(0, Math.min(1, ff * 0.92));
+            this.waterMesh.isVisible = wf > 0.02;
+            this.waterMesh.visibility = wf;
+        }
     }
 
     _generate() {
@@ -46,7 +85,11 @@ export class Chunk {
         const zOffset = this.cz * Chunk.SIZE;
 
         const GAP_SCALE = 0.90;
-        const SKIRT_DEPTH = 10;
+
+        const BEDROCK_Y = -92;
+        const CLIFF_WALL_MAX = 14;
+        const WALL_SLOPE_THRESHOLD = 2;
+        const EDGE_WALL_MAX = 64;
 
         const surface = MeshBuilder.CreateBox(
             `surface_${this.cx}_${this.cz}`,
@@ -79,34 +122,53 @@ export class Chunk {
         waterMat.useVertexColors = true;
         waterMat.emissiveColor = new Color3(0, 0, 0);
         waterMat.diffuseColor = new Color3(1, 1, 1);
-        waterMat.specularColor = new Color3(0.12, 0.12, 0.15);
-        waterMat.alpha = 0.72;
+
+        // Slightly more "reflective" look without heavy reflection probes
+        waterMat.specularColor = new Color3(0.30, 0.30, 0.36);
+        waterMat.specularPower = 96;
+
+        waterMat.alpha = 0.70;
         waterMat.backFaceCulling = false;
         water.material = waterMat;
 
+        /** @type {number[]} */
         const surfaceMatrices = [];
+        /** @type {number[]} */
         const surfaceColors = [];
+        /** @type {number[]} */
         const waterMatrices = [];
+        /** @type {number[]} */
         const waterColors = [];
 
         const pushSurface = (lx, y, lz, c, a = 1) => {
+            // Defensive: ensure c is always a valid Color3-like object
+            const cc =
+                (c && typeof c.r === "number" && typeof c.g === "number" && typeof c.b === "number")
+                    ? c
+                    : new Color3(0.8, 0.8, 0.8);
+
             const m = Matrix.Compose(
                 new Vector3(GAP_SCALE, GAP_SCALE, GAP_SCALE),
                 Quaternion.Identity(),
                 new Vector3(lx + 0.5, y + 0.5, lz + 0.5)
             );
             surfaceMatrices.push(...m.toArray());
-            surfaceColors.push(c.r, c.g, c.b, a);
+            surfaceColors.push(cc.r, cc.g, cc.b, a);
         };
 
         const pushWater = (lx, y, lz, c, a = 1) => {
+            const cc =
+                (c && typeof c.r === "number" && typeof c.g === "number" && typeof c.b === "number")
+                    ? c
+                    : new Color3(0.2, 0.3, 0.35);
+
             const m = Matrix.Compose(
                 new Vector3(GAP_SCALE, GAP_SCALE, GAP_SCALE),
                 Quaternion.Identity(),
                 new Vector3(lx + 0.5, y + 0.54, lz + 0.5)
             );
             waterMatrices.push(...m.toArray());
-            waterColors.push(c.r, c.g, c.b, a);
+            waterColors.push(cc.r, cc.g, cc.b, a);
         };
 
         const shade = (c, f) =>
@@ -131,7 +193,6 @@ export class Chunk {
             }
         };
 
-        // Height cache (+border)
         const H = Array.from({ length: Chunk.SIZE + 2 }, () =>
             new Array(Chunk.SIZE + 2).fill(0)
         );
@@ -143,7 +204,28 @@ export class Chunk {
             }
         }
 
-        const treeColors = getTreeColors();
+        // ✅ Bulletproof tree color palette (prevents "cannot read .r")
+        const treeColorsRaw = getTreeColors();
+        const treeColors =
+            (treeColorsRaw && typeof treeColorsRaw === "object") ? treeColorsRaw : Object.create(null);
+
+        const resolveColor3 = (val, fallback) => {
+            if (val && typeof val.r === "number" && typeof val.g === "number" && typeof val.b === "number") {
+                // already Color3-like
+                return val;
+            }
+            if (val && typeof val === "object" && "r" in val && "g" in val && "b" in val) {
+                // plain object {r,g,b}
+                const r = Number(val.r);
+                const g = Number(val.g);
+                const b = Number(val.b);
+                if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) return new Color3(r, g, b);
+            }
+            return fallback;
+        };
+
+        const defaultObjColor = new Color3(0.8, 0.8, 0.8);
+        const ruinFallback = resolveColor3(treeColors.ruin, defaultObjColor);
 
         for (let lx = 0; lx < Chunk.SIZE; lx++) {
             for (let lz = 0; lz < Chunk.SIZE; lz++) {
@@ -159,7 +241,6 @@ export class Chunk {
 
                 const base = getColorForHeight(h, wx, wz);
 
-                // Slope shading adds depth without geometry cost
                 const slope = Math.max(
                     Math.abs(h - nE),
                     Math.abs(h - nW),
@@ -167,86 +248,118 @@ export class Chunk {
                     Math.abs(h - nS)
                 );
                 const shadeFactor = 1.0 - Math.min(0.40, slope * 0.06);
+
                 pushSurface(lx, h, lz, shade(base, shadeFactor), 1);
+                pushSurface(lx, BEDROCK_Y, lz, new Color3(0.10, 0.12, 0.14), 1);
 
-                // Cliff skirts (bounded)
-                const fillSkirt = (neighborH, dx, dz) => {
-                    const diff = h - neighborH;
-                    if (diff <= 0) return;
-                    const depth = Math.min(diff, SKIRT_DEPTH);
-                    for (let i = 1; i <= depth; i++) {
-                        const y = h - i;
-                        const matId = getMaterialAt(wx, y, wz);
-                        pushSurface(
-                            lx + dx,
-                            y,
-                            lz + dz,
-                            colorForMaterial(matId, base, i),
-                            1
-                        );
+                if (slope >= WALL_SLOPE_THRESHOLD) {
+                    const minN = Math.min(nE, nW, nN, nS);
+                    const diff = h - minN;
+
+                    if (diff > 1) {
+                        const depth = Math.min(diff - 1, CLIFF_WALL_MAX);
+                        let depthIndex = 1;
+
+                        const bottomY = Math.max(BEDROCK_Y + 1, h - depth);
+
+                        for (let y = h - 1; y >= bottomY; y--) {
+                            const matId = getMaterialAt(wx, y, wz);
+                            pushSurface(lx, y, lz, colorForMaterial(matId, base, depthIndex), 1);
+                            depthIndex++;
+                        }
                     }
-                };
+                }
 
-                fillSkirt(nE, 1, 0);
-                fillSkirt(nW, -1, 0);
-                fillSkirt(nN, 0, 1);
-                fillSkirt(nS, 0, -1);
+                if (this.bounds) {
+                    const isEdgeColumn =
+                        wx === this.bounds.minWorldX ||
+                        wx === this.bounds.maxWorldX ||
+                        wz === this.bounds.minWorldZ ||
+                        wz === this.bounds.maxWorldZ;
+
+                    if (isEdgeColumn) {
+                        const depth = Math.min(EDGE_WALL_MAX, h - (BEDROCK_Y + 1));
+                        let depthIndex = 1;
+                        for (let y = h - 1; y >= Math.max(BEDROCK_Y + 1, h - depth); y--) {
+                            const matId = getMaterialAt(wx, y, wz);
+                            pushSurface(lx, y, lz, colorForMaterial(matId, base, depthIndex), 1);
+                            depthIndex++;
+                        }
+                    }
+                }
 
                 const biome = getBiomeAt(wx, wz);
 
-                // Ice overlay
-                const iceF = getIceFactor(wx, wz, h);
-                if (iceF > 0.02) {
+                // Water
+                if (h < WATER_LEVEL) {
                     const wc = getWaterColor(wx, wz);
-                    pushWater(lx, h, lz, shade(wc, 0.95 + iceF * 0.10), 0.28 + iceF * 0.55);
+                    const wf = 0.80;
+
+                    // biome.waterTint can be missing in some biomes; guard it
+                    const tint = (biome && biome.waterTint)
+                        ? biome.waterTint
+                        : new Color3(0.10, 0.18, 0.22);
+
+                    const wcc = new Color3(
+                        wc.r * wf + tint.r * (1 - wf),
+                        wc.g * wf + tint.g * (1 - wf),
+                        wc.b * wf + tint.b * (1 - wf)
+                    );
+                    pushWater(lx, WATER_LEVEL, lz, wcc, 1);
                 }
 
-                // Rivers overlay
-                const riverF = getRiverFactor(wx, wz);
-                if (iceF < 0.22 && riverF > 0.55) {
-                    const wc = getWaterColor(wx, wz);
-
-                    let riverColor = wc;
-                    if (biome.id === "crystalline_plains") {
-                        riverColor = new Color3(Math.min(1, wc.r * 0.5), Math.min(1, wc.g * 0.7), Math.min(1, wc.b * 1.5));
-                    } else if (biome.id === "crimson_desert") {
-                        riverColor = new Color3(Math.min(1, wc.r * 1.25), Math.min(1, wc.g * 0.6), Math.min(1, wc.b * 0.55));
-                    } else if (biome.id === "fungal_marsh") {
-                        riverColor = new Color3(Math.min(1, wc.r * 0.7), Math.min(1, wc.g * 0.5), Math.min(1, wc.b * 1.2));
-                    }
-
-                    pushWater(lx, h, lz, riverColor, 0.78);
+                // Ice (thin top sheet)
+                const ice = getIceFactor(wx, wz);
+                if (ice > 0.48 && h <= WATER_LEVEL + 1) {
+                    const ic = new Color3(0.62, 0.78, 0.95);
+                    const a = Math.min(0.82, 0.32 + ice * 0.55);
+                    pushSurface(lx, WATER_LEVEL + 1, lz, ic, a);
                 }
 
-                // Ocean/lake plane
-                if (h <= WATER_LEVEL) {
-                    const wc = getWaterColor(wx, wz);
-                    pushWater(lx, WATER_LEVEL, lz, wc, 0.72);
+                // River banks (slight darkening)
+                const rf = getRiverFactor(wx, wz);
+                if (rf > 0.55 && h >= WATER_LEVEL - 1) {
+                    const bank = shade(base, 0.82);
+                    pushSurface(lx, h, lz, bank, 1);
                 }
 
-                // Objects/POIs
+                // Objects (ruins/trees/spires etc)
                 const blocks = getTreeAt(wx, wz, h);
-                if (blocks && blocks.length) {
+                if (Array.isArray(blocks) && blocks.length) {
                     for (const b of blocks) {
-                        const c = treeColors[b.type] ?? new Color3(1, 0, 1);
-                        pushSurface(b.x - xOffset, b.y, b.z - zOffset, c, 1);
+                        if (!b) continue;
+
+                        const type = (typeof b.type === "string" && b.type.length) ? b.type : "ruin";
+
+                        // Resolve to a guaranteed Color3
+                        const raw = treeColors[type];
+                        const c = resolveColor3(raw, ruinFallback);
+
+                        // b.x/y/z are ABSOLUTE (world) blocks in your codebase
+                        // Convert to chunk-local coordinates
+                        const lx2 = (Number.isFinite(b.x) ? b.x : wx) - xOffset;
+                        const lz2 = (Number.isFinite(b.z) ? b.z : wz) - zOffset;
+                        const y2 = Number.isFinite(b.y) ? b.y : (h + 1);
+
+                        pushSurface(lx2, y2, lz2, c, 1);
                     }
                 }
             }
         }
 
-        surface.thinInstanceSetBuffer("matrix", surfaceMatrices, 16, true);
-        surface.thinInstanceSetBuffer("color", surfaceColors, 4, true);
+        surface.thinInstanceSetBuffer("matrix", new Float32Array(surfaceMatrices), 16, true);
+        surface.thinInstanceSetBuffer("color", new Float32Array(surfaceColors), 4, true);
 
-        water.thinInstanceSetBuffer("matrix", waterMatrices, 16, true);
-        water.thinInstanceSetBuffer("color", waterColors, 4, true);
+        water.thinInstanceSetBuffer("matrix", new Float32Array(waterMatrices), 16, true);
+        water.thinInstanceSetBuffer("color", new Float32Array(waterColors), 4, true);
+
+        // Freeze for perf (safe because we rely on alwaysSelectAsActiveMesh)
+        surface.freezeWorldMatrix();
+        water.freezeWorldMatrix();
+        surfMat.freeze();
+        waterMat.freeze();
 
         this.surfaceMesh = surface;
         this.waterMesh = water;
-    }
-
-    dispose() {
-        if (this.surfaceMesh) this.surfaceMesh.dispose();
-        if (this.waterMesh) this.waterMesh.dispose();
     }
 }

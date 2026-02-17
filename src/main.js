@@ -1,25 +1,30 @@
+// src/main.js
 import { createScene } from "./scene.js";
 import { setNoiseSeed, getNoiseSeed } from "./util/hash.js";
 
 function pickSeed() {
-    // Allow deterministic repro: http://localhost:5173/?seed=abc123
     const params = new URLSearchParams(window.location.search);
     const s = params.get("seed");
     if (s && s.trim().length) return s.trim();
-
-    // Default: new seed each reload (what you want for "variance")
     return `oracle-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
 }
+
+let started = false;
 
 window.addEventListener("DOMContentLoaded", () => {
     const seed = pickSeed();
     setNoiseSeed(seed);
-
-    // Useful debug: you can copy this into the URL if you want to reproduce
     console.log("[WORLD] seed =", seed, "(numeric:", getNoiseSeed(), ")");
 
     const canvas = document.getElementById("renderCanvas");
-    if (canvas) {
-        createScene(canvas);
-    }
+    if (!canvas) return;
+
+    // ✅ Do not render anything until Start is pressed.
+    window.addEventListener("oracle:newgame", (e) => {
+        if (started) return;
+        started = true;
+
+        const settings = (e && e.detail) ? e.detail : (window.__ORACLE_SETTINGS__ || {});
+        createScene(canvas, settings);
+    });
 });

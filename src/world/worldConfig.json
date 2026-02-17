@@ -1,0 +1,188 @@
+{
+  "waterLevel": -9,
+
+  "biomeCell": 52,
+  "transitionBand": 0.28,
+
+  "climate": {
+    "warpFreq": 0.03,
+    "warpStrength": 1.9,
+
+    "tempFreq": 0.18,
+    "moistFreq": 0.16,
+    "elevFreq": 0.14,
+
+    "biasTempFreq": 0.07,
+    "biasMoistFreq": 0.06,
+    "biasElevFreq": 0.06,
+
+    "biasTempAmp": 0.18,
+    "biasMoistAmp": 0.18,
+    "biasElevAmp": 0.14
+  },
+
+  "ruinsOverlay": {
+    "enabled": true,
+    "threshold": 0.992,
+    "biomeId": "ancient_ruins"
+  },
+
+  "biomes": [
+    {
+      "id": "crimson_desert",
+      "name": "Crimson Desert",
+      "profile": "desert",
+      "baseColor": [0.86, 0.42, 0.2],
+      "roughness": 0.55,
+      "vertical": 0.55,
+      "wetness": 0.05,
+      "materials": { "surface": "regolith", "subsurface": "regolith" },
+      "riverTint": [1.25, 0.6, 0.55],
+      "climatePref": {
+        "temp": { "center": 0.85, "width": 0.35, "pow": 1.4 },
+        "moist": { "center": 0.15, "width": 0.3, "pow": 1.5 },
+        "elev": { "center": 0.45, "width": 0.55, "pow": 0.9 }
+      }
+    },
+
+    {
+      "id": "fungal_marsh",
+      "name": "Fungal Marsh",
+      "profile": "swamp",
+      "baseColor": [0.42, 0.35, 0.62],
+      "roughness": 0.45,
+      "vertical": 0.4,
+      "wetness": 0.95,
+      "materials": { "surface": "regolith", "subsurface": "regolith" },
+      "waterColor": [0.10, 0.22, 0.18],
+      "riverTint": [0.7, 0.5, 1.2],
+      "climatePref": {
+        "moist": { "center": 0.9, "width": 0.35, "pow": 1.5 },
+        "elev": { "center": 0.25, "width": 0.4, "pow": 1.2 },
+        "temp": { "center": 0.6, "width": 0.55, "pow": 0.8 }
+      }
+    },
+
+    {
+      "id": "alien_forest",
+      "name": "Alien Forest",
+      "profile": "forest",
+      "baseColor": [0.18, 0.58, 0.4],
+      "roughness": 0.8,
+      "vertical": 0.85,
+      "wetness": 0.55,
+      "materials": { "surface": "regolith", "subsurface": "regolith" },
+      "climatePref": {
+        "moist": { "center": 0.7, "width": 0.4, "pow": 1.2 },
+        "elev": { "center": 0.45, "width": 0.55, "pow": 0.9 },
+        "temp": { "center": 0.55, "width": 0.55, "pow": 0.9 }
+      }
+    },
+
+    {
+      "id": "azure_peaks",
+      "name": "Azure Peaks",
+      "profile": "mountains",
+      "baseColor": [0.18, 0.36, 0.86],
+      "roughness": 1.25,
+      "vertical": 1.55,
+      "wetness": 0.25,
+      "materials": { "surface": "anorthosite", "subsurface": "anorthosite" },
+      "climatePref": {
+        "elev": { "center": 0.88, "width": 0.30, "pow": 1.6 },
+        "temp": { "center": 0.55, "width": 0.65, "pow": 0.8 }
+      }
+    },
+
+    {
+      "id": "volcanic_highlands",
+      "name": "Volcanic Highlands",
+      "profile": "volcanic",
+      "baseColor": [0.22, 0.2, 0.24],
+      "roughness": 1.15,
+      "vertical": 1.35,
+      "wetness": 0.10,
+      "materials": { "surface": "basalt", "subsurface": "basalt" },
+      "rarityGate": { "threshold": 0.85, "belowMultiplier": 0.35 },
+      "climatePref": {
+        "temp": { "center": 0.75, "width": 0.40, "pow": 1.1 },
+        "elev": { "center": 0.75, "width": 0.40, "pow": 1.2 },
+        "moist": { "center": 0.25, "width": 0.45, "pow": 1.0 }
+      }
+    },
+
+    {
+      "id": "glacial_fields",
+      "name": "Glacial Fields",
+      "profile": "glacier",
+      "baseColor": [0.82, 0.92, 1.0],
+      "roughness": 0.65,
+      "vertical": 0.85,
+      "wetness": 0.35,
+      "materials": { "surface": "regolith", "subsurface": "regolith" },
+      "waterColor": [0.35, 0.55, 0.72],
+      "climatePref": {
+        "temp": { "center": 0.18, "width": 0.30, "pow": 1.6 },
+        "elev": { "center": 0.60, "width": 0.70, "pow": 0.8 }
+      }
+    },
+
+    {
+      "id": "crystalline_plains",
+      "name": "Crystalline Plains",
+      "profile": "plains",
+      "baseColor": [0.58, 0.7, 0.86],
+      "roughness": 0.70,
+      "vertical": 0.75,
+      "wetness": 0.20,
+      "materials": { "surface": "regolith", "subsurface": "regolith" },
+      "riverTint": [0.5, 0.7, 1.5],
+      "climatePref": {
+        "temp": { "center": 0.55, "width": 0.60, "pow": 1.0 },
+        "moist": { "center": 0.40, "width": 0.60, "pow": 1.0 },
+        "elev": { "center": 0.45, "width": 0.70, "pow": 1.0 }
+      }
+    },
+
+    {
+      "id": "ancient_ruins",
+      "name": "Ancient Ruins",
+      "profile": "ruins",
+      "baseColor": [0.62, 0.62, 0.52],
+      "roughness": 0.95,
+      "vertical": 0.95,
+      "wetness": 0.20,
+      "materials": { "surface": "regolith", "subsurface": "regolith" },
+      "climatePref": {
+        "temp": { "center": 0.55, "width": 0.80, "pow": 0.9 },
+        "moist": { "center": 0.40, "width": 0.80, "pow": 0.9 },
+        "elev": { "center": 0.45, "width": 0.90, "pow": 0.9 }
+      }
+    }
+  ],
+
+  "terrain": {
+    "mountain": {
+      "bigAmp": 56,
+      "medAmp": 32,
+      "cragAmp": 9,
+      "baseLift": 16,
+      "hardClamp": 92,
+      "softKnee": 10
+    }
+  },
+
+  "ice": {
+    "latScale": 750,
+    "coldLatWeight": 0.7,
+    "coldNoiseWeight": 0.35,
+    "elevStart": 12,
+    "elevRange": 50
+  },
+
+  "rivers": {
+    "riverDepth": 12.5,
+    "ravineDepth": 8.0,
+    "ravineMix": 0.85
+  }
+}

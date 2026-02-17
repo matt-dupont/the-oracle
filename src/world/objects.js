@@ -898,154 +898,145 @@ export function getTreeAt(worldX, worldZ, terrainH) {
     const river = getRiverFactor(worldX, worldZ);
     if (river > 0.70) return null;
 
-    // Get biome at this location
     const biome = getBiomeAt(worldX, worldZ);
-
     const blocks = [];
 
-    // --- Big POIs (ruins/spires/crystals/ice formations) on a grid ---
-    // Smaller cell => you see POIs more often without walking forever.
-    const CELL = 72;
+    // --- Big POIs on a grid (rarer + more intentional) ---
+    const CELL = 96;
     const { cx, cz } = cellId(worldX, worldZ, CELL);
     const c = cellCenter(cx, cz, CELL);
 
-    // Only spawn POI at the cell center (so it doesn't repeat every block)
     if (worldX === c.x && worldZ === c.z) {
         const p = h01(cx * 5011 + 7, cz * 9011 + 19);
         const spawnBoost = nearSpawnBoost(worldX, worldZ);
 
-        // Increase chance near spawn, still present elsewhere
-        const threshold = 0.80 - spawnBoost * 0.28; // near spawn => ~0.52
+        // Slightly rarer than before
+        const threshold = 0.83 - spawnBoost * 0.24;
         if (p > threshold) {
-            // Get object probabilities from biome
             const objectProbs = biome.objectProbabilities;
 
-            // Special case for ice biomes
+            // Cluster mask: prevents “random everywhere” towers
+            const clusterMask = h01(cx * 911 + 5, cz * 733 + 9);
+            const allowCluster = clusterMask > 0.38;
+
+            // Ice special case stays (but still respects clustering a bit)
             const ice = getIceFactor(worldX, worldZ, terrainH);
-            if (ice > 0.55 && h01(cx * 701 + 3, cz * 1109 + 9) > 0.35) {
+            if (ice > 0.55 && allowCluster && h01(cx * 701 + 3, cz * 1109 + 9) > 0.42) {
                 addIceFormation(blocks, worldX, terrainH, worldZ, p);
                 return blocks;
             }
 
-            // Weighted random selection based on biome probabilities
-            const rand = h01(cx * 133 + 17, cz * 277 + 23);
+            if (!allowCluster) return null;
 
-            // Determine object type based on biome probabilities
-            if (objectProbs.ruin && rand < objectProbs.ruin) {
-                const r = 3 + Math.floor(h01(cx * 19, cz * 29) * 3);  // 3..5
-                const ht = 4 + Math.floor(h01(cx * 31, cz * 41) * 5); // 4..8
-                addRuin(blocks, worldX, terrainH + 1, worldZ, r, ht);
-            } 
-            else if (objectProbs.spire && rand < objectProbs.ruin + objectProbs.spire) {
-                const ht = 10 + Math.floor(h01(cx * 47, cz * 59) * 14); // 10..24
+            // --- Proper weighted selection (fixes monolith bug) ---
+            const wR = Number(objectProbs?.ruin ?? 0);
+            const wS = Number(objectProbs?.spire ?? 0);
+            const wC = Number(objectProbs?.crystal ?? 0);
+            const wCC = Number(objectProbs?.crystal_cluster ?? 0);
+            const wM = Number(objectProbs?.monolith ?? 0);
+
+            const total = wR + wS + wC + wCC + wM;
+            if (total <= 0) return null;
+
+            const r = h01(cx * 133 + 17, cz * 277 + 23) * total;
+
+            let acc = 0;
+
+            acc += wR;
+            if (r < acc && wR > 0) {
+                const rad = 3 + Math.floor(h01(cx * 19, cz * 29) * 2);  // 3..4
+                const ht = 4 + Math.floor(h01(cx * 31, cz * 41) * 4);   // 4..7
+                addRuin(blocks, worldX, terrainH + 1, worldZ, rad, ht);
+                return blocks;
+            }
+
+            acc += wS;
+            if (r < acc && wS > 0) {
+                // shorter spires = less ugly
+                const ht = 8 + Math.floor(h01(cx * 47, cz * 59) * 9); // 8..16
                 addSpire(blocks, worldX, terrainH, worldZ, ht);
+                return blocks;
             }
-            else if (objectProbs.crystal && rand < objectProbs.ruin + objectProbs.spire + objectProbs.crystal) {
+
+            acc += wC;
+            if (r < acc && wC > 0) {
                 addCrystalCluster(blocks, worldX, terrainH, worldZ, p);
+                return blocks;
             }
-            else if (objectProbs.crystal_cluster && rand < objectProbs.ruin + objectProbs.spire + objectProbs.crystal + objectProbs.crystal_cluster) {
+
+            acc += wCC;
+            if (r < acc && wCC > 0) {
                 addCrystalCluster(blocks, worldX, terrainH, worldZ, p);
+                return blocks;
             }
-            else if (objectProbs.monolith) {
-                // Add monolith (tall, thin structure)
-                const height = 8 + Math.floor(h01(cx * 61, cz * 73) * 12); // 8..20
+
+            // Monolith (now correctly gated)
+            if (wM > 0) {
+                const height = 6 + Math.floor(h01(cx * 61, cz * 73) * 9); // 6..14
                 for (let i = 1; i <= height; i++) {
                     blocks.push({ x: worldX, y: terrainH + i, z: worldZ, type: "monolith" });
                 }
                 blocks.push({ x: worldX, y: terrainH + height + 1, z: worldZ, type: "monolithGlow" });
+                return blocks;
             }
-
-            return blocks;
         }
     }
 
-    // --- Small ambient props (biome-specific vegetation) ---
-    const a = h01(worldX * 3, worldZ * 3);
+    // --- Small ambient props (less spam + slight clustering) ---
     const spawnBoost = nearSpawnBoost(worldX, worldZ);
 
-    // Adjust probability based on biome
-    const biomeDensity = biome.id === "fungal_marsh" || biome.id === "alien_forest" ? 0.06 : 0.035;
-    const prob = biomeDensity + spawnBoost * 0.04;
+    // Reduce base densities
+    const biomeDensity =
+        biome.id === "fungal_marsh" || biome.id === "alien_forest"
+            ? 0.040
+            : 0.018;
 
-    if (a < prob) {
+    const prob = biomeDensity + spawnBoost * 0.02;
+
+    // Cluster mask to avoid salt-and-pepper noise
+    const ax = Math.floor(worldX / 6);
+    const az = Math.floor(worldZ / 6);
+    const ambientCluster = h01(ax * 41 + 7, az * 53 - 11);
+
+    const a = h01(worldX * 3, worldZ * 3);
+
+    if (ambientCluster > 0.55 && a < prob) {
         const kind = h01(worldX * 11 + 9, worldZ * 13 - 7);
 
-        // Biome-specific small objects
         if (biome.id === "alien_forest") {
-            // Alien trees and plants
-            if (kind < 0.6) {
-                // Alien tree
-                const height = 2 + Math.floor(h01(worldX * 17, worldZ * 19) * 3);
+            if (kind < 0.55) {
+                const height = 2 + Math.floor(h01(worldX * 17, worldZ * 19) * 2); // 2..3
                 for (let i = 1; i <= height; i++) {
                     blocks.push({ x: worldX, y: terrainH + i, z: worldZ, type: "tree_trunk" });
                 }
                 blocks.push({ x: worldX, y: terrainH + height + 1, z: worldZ, type: "tree_canopy" });
             } else {
-                // Alien plant
                 blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "shrub" });
-                if (h01(worldX + 1, worldZ - 1) < 0.4) {
-                    blocks.push({ x: worldX + 1, y: terrainH + 1, z: worldZ, type: "shrub" });
-                }
             }
-        }
-        else if (biome.id === "fungal_marsh") {
-            // Mushrooms and fungal growths
-            if (kind < 0.7) {
-                // Mushroom
+        } else if (biome.id === "fungal_marsh") {
+            if (kind < 0.65) {
                 blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "mushroom" });
-                blocks.push({ x: worldX, y: terrainH + 2, z: worldZ, type: "mushroom" });
-
-                // Sometimes add a cluster
-                if (h01(worldX * 23, worldZ * 29) < 0.3) {
-                    blocks.push({ x: worldX + 1, y: terrainH + 1, z: worldZ, type: "mushroom" });
-                    blocks.push({ x: worldX, y: terrainH + 1, z: worldZ + 1, type: "mushroom" });
+                if (h01(worldX * 23, worldZ * 29) < 0.22) {
+                    blocks.push({ x: worldX, y: terrainH + 2, z: worldZ, type: "mushroom" });
                 }
             } else {
-                // Fungal growth
                 blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "mushroomGlow" });
             }
-        }
-        else if (biome.id === "crystalline_plains") {
-            // Small crystal formations
-            if (kind < 0.6) {
+        } else if (biome.id === "crystalline_plains") {
+            if (kind < 0.65) {
                 blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "crystal" });
-                if (h01(worldX * 31, worldZ * 37) < 0.3) {
-                    blocks.push({ x: worldX, y: terrainH + 2, z: worldZ, type: "crystal" });
-                }
             } else {
                 blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "crystal2" });
             }
-        }
-        else if (biome.id === "crimson_desert") {
-            // Desert plants
-            if (kind < 0.7) {
-                blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "shrubRed" });
-            } else {
-                // Small rock formation
-                blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "monolith" });
-            }
-        }
-        else if (biome.id === "glacial_fields") {
-            // Small ice formations
-            if (kind < 0.8) {
-                blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "iceSpire" });
-                if (h01(worldX * 41, worldZ * 43) < 0.4) {
-                    blocks.push({ x: worldX, y: terrainH + 2, z: worldZ, type: "iceSpire" });
-                }
-            } else {
-                blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "iceCore" });
-            }
-        }
-        else {
-            // Default vegetation for other biomes
-            if (kind < 0.65) {
+        } else if (biome.id === "crimson_desert") {
+            if (kind < 0.75) {
                 blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "shrub" });
-                if (h01(worldX + 1, worldZ - 1) < 0.25)
-                    blocks.push({ x: worldX + 1, y: terrainH + 1, z: worldZ, type: "shrub" });
             } else {
-                blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "mushroom" });
-                blocks.push({ x: worldX, y: terrainH + 2, z: worldZ, type: "mushroom" });
+                blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "crystal2" });
             }
+        } else {
+            // fallback: very minimal
+            if (kind < 0.5) blocks.push({ x: worldX, y: terrainH + 1, z: worldZ, type: "shrub" });
         }
 
         return blocks;
@@ -1053,3 +1044,4 @@ export function getTreeAt(worldX, worldZ, terrainH) {
 
     return null;
 }
+
