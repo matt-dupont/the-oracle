@@ -1,6 +1,7 @@
 // src/world/World.js
 import { Chunk } from "./Chunk.js";
 import { getHeight } from "./terrain.js";
+import { FabricField } from "./FabricField.js";
 
 function buildSpiralCoords(minCx, maxCx, minCz, maxCz) {
     // Spiral out from (0,0) so initial load is fast + visible immediately.
@@ -88,6 +89,9 @@ export class World {
 
         // Vision cache
         this._visHash = "";
+        this.shadows = null;
+
+        this.fabric = new FabricField(scene, this);
     }
 
     _key(cx, cz) {
@@ -95,6 +99,7 @@ export class World {
     }
 
     update(dt = 0.016) {
+        if (this.fabric) this.fabric.update(dt);
         if (this._pendingCreates.length === 0) return;
 
         this._bootstrapSeconds = Math.max(0, this._bootstrapSeconds - dt);
@@ -107,7 +112,7 @@ export class World {
             const key = this._key(next.cx, next.cz);
             if (this.chunks.has(key)) continue;
 
-            const ch = new Chunk(next.cx, next.cz, this.scene);
+            const ch = new Chunk(next.cx, next.cz, this.scene, this.shadows);
             this.chunks.set(key, ch);
             this.createdChunks++;
         }
@@ -143,6 +148,7 @@ export class World {
 
         if (!lights || lights.length === 0) {
             for (const ch of this.chunks.values()) ch.setFade(0);
+            if (this.fabric) this.fabric.setFades(0, 0, 0, 0);
             return;
         }
 
@@ -154,42 +160,55 @@ export class World {
         if (h === this._visHash) return;
         this._visHash = h;
 
+        const getFadeAt = (wx, wz) => {
+            let best = 0;
+            for (let i = 0; i < lights.length; i++) {
+                const L = lights[i];
+                const inner = Math.max(1, L.r * innerMul);
+                const outer = Math.max(inner + 1, L.r * outerMul);
+                const dx = wx - L.x;
+                const dz = wz - L.z;
+                const d2 = dx * dx + dz * dz;
+                if (d2 <= inner * inner) return 1;
+                if (d2 < outer * outer) {
+                    const d = Math.sqrt(d2);
+                    const t = (d - inner) / (outer - inner);
+                    const s = t * t * (3 - 2 * t);
+                    const fade = 1 - s;
+                    if (fade > best) best = fade;
+                }
+            }
+            return best;
+        };
+
         for (const ch of this.chunks.values()) {
             const x0 = ch.cx * Chunk.SIZE;
             const z0 = ch.cz * Chunk.SIZE;
             const x1 = x0 + Chunk.SIZE;
             const z1 = z0 + Chunk.SIZE;
 
-            let bestFade = 0;
+            const f00 = getFadeAt(x0, z0);
+            const f10 = getFadeAt(x1, z0);
+            const f01 = getFadeAt(x0, z1);
+            const f11 = getFadeAt(x1, z1);
 
-            for (let i = 0; i < lights.length; i++) {
-                const L = lights[i];
-
-                const inner = Math.max(1, L.r * innerMul);
-                const outer = Math.max(inner + 1, L.r * outerMul);
-
-                const inner2 = inner * inner;
-                const outer2 = outer * outer;
-
-                const dx = (L.x < x0) ? (x0 - L.x) : (L.x > x1 ? (L.x - x1) : 0);
-                const dz = (L.z < z0) ? (z0 - L.z) : (L.z > z1 ? (L.z - z1) : 0);
-                const d2 = dx * dx + dz * dz;
-
-                if (d2 <= inner2) {
-                    bestFade = 1;
-                    break;
-                }
-
-                if (d2 < outer2) {
-                    const d = Math.sqrt(d2);
-                    const t = (d - inner) / (outer - inner);
-                    const s = t * t * (3 - 2 * t);
-                    const fade = 1 - s;
-                    if (fade > bestFade) bestFade = fade;
-                }
-            }
-
-            ch.setFade(bestFade);
+            ch.setFadeCorners(f00, f10, f01, f11);
         }
+
+        if (this.fabric) {
+            const f00 = getFadeAt(this.minWorldX, this.minWorldZ);
+            const f10 = getFadeAt(this.maxWorldX, this.minWorldZ);
+            const f01 = getFadeAt(this.minWorldX, this.maxWorldZ);
+            const f11 = getFadeAt(this.maxWorldX, this.maxWorldZ);
+            this.fabric.setFades(f00, f10, f01, f11);
+        }
+    }
+
+    dispose() {
+        if (this.fabric) this.fabric.dispose();
+        for (const ch of this.chunks.values()) {
+            if (ch.dispose) ch.dispose();
+        }
+        this.chunks.clear();
     }
 }

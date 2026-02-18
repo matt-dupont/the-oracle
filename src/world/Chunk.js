@@ -29,13 +29,13 @@ export class Chunk {
      * @param {number} cx
      * @param {number} cz
      * @param {import('@babylonjs/core').Scene} scene
-     * @param {{minWorldX:number,maxWorldX:number,minWorldZ:number,maxWorldZ:number}} [bounds]
+     * @param {import('@babylonjs/core').ShadowGenerator} [shadows]
      */
-    constructor(cx, cz, scene, bounds) {
+    constructor(cx, cz, scene, shadows = null) {
         this.cx = cx;
         this.cz = cz;
         this.scene = scene;
-        this.bounds = bounds ?? null;
+        this.shadows = shadows;
 
         this.surfaceMesh = null;
         this.waterMesh = null;
@@ -80,16 +80,21 @@ export class Chunk {
         }
     }
 
+    /**
+     * More granular corner-based fading for bilinear smoothness.
+     * Overrides setFade if the shader/material supports it.
+     * Currently just averages and uses standard setFade.
+     */
+    setFadeCorners(f00, f10, f01, f11) {
+        const avg = (f00 + f10 + f01 + f11) * 0.25;
+        this.setFade(avg);
+    }
+
     _generate() {
         const xOffset = this.cx * Chunk.SIZE;
         const zOffset = this.cz * Chunk.SIZE;
 
-        const GAP_SCALE = 0.90;
-
-        const BEDROCK_Y = -92;
-        const CLIFF_WALL_MAX = 14;
-        const WALL_SLOPE_THRESHOLD = 2;
-        const EDGE_WALL_MAX = 64;
+        const GAP_SCALE = 0.92;
 
         const surface = MeshBuilder.CreateBox(
             `surface_${this.cx}_${this.cz}`,
@@ -105,8 +110,15 @@ export class Chunk {
         surfMat.useVertexColors = true;
         surfMat.emissiveColor = new Color3(0, 0, 0);
         surfMat.diffuseColor = new Color3(1, 1, 1);
-        surfMat.specularColor = new Color3(0, 0, 0);
+        surfMat.specularColor = new Color3(0.1, 0.1, 0.1);
+        surfMat.specularPower = 32;
         surface.material = surfMat;
+
+        if (this.shadows) {
+            surface.receiveShadows = true;
+            // Note: we can't easily add thin instances to shadows without shadowGenerator.addShadowMaker
+            // but for now let's at least receive them.
+        }
 
         const water = MeshBuilder.CreateBox(
             `water_${this.cx}_${this.cz}`,
@@ -123,11 +135,11 @@ export class Chunk {
         waterMat.emissiveColor = new Color3(0, 0, 0);
         waterMat.diffuseColor = new Color3(1, 1, 1);
 
-        // Slightly more "reflective" look without heavy reflection probes
-        waterMat.specularColor = new Color3(0.30, 0.30, 0.36);
-        waterMat.specularPower = 96;
+        // Enhanced "reflective" look
+        waterMat.specularColor = new Color3(0.8, 0.8, 0.9);
+        waterMat.specularPower = 128;
 
-        waterMat.alpha = 0.70;
+        waterMat.alpha = 0.65;
         waterMat.backFaceCulling = false;
         water.material = waterMat;
 
@@ -165,7 +177,7 @@ export class Chunk {
             const m = Matrix.Compose(
                 new Vector3(GAP_SCALE, GAP_SCALE, GAP_SCALE),
                 Quaternion.Identity(),
-                new Vector3(lx + 0.5, y + 0.54, lz + 0.5)
+                new Vector3(lx + 0.5, y + 0.51, lz + 0.5)
             );
             waterMatrices.push(...m.toArray());
             waterColors.push(cc.r, cc.g, cc.b, a);
@@ -240,51 +252,15 @@ export class Chunk {
                 const nS = H[lx + 1][lz + 0];
 
                 const base = getColorForHeight(h, wx, wz);
+                pushSurface(lx, h, lz, base, 1);
 
-                const slope = Math.max(
-                    Math.abs(h - nE),
-                    Math.abs(h - nW),
-                    Math.abs(h - nN),
-                    Math.abs(h - nS)
-                );
-                const shadeFactor = 1.0 - Math.min(0.40, slope * 0.06);
-
-                pushSurface(lx, h, lz, shade(base, shadeFactor), 1);
-                pushSurface(lx, BEDROCK_Y, lz, new Color3(0.10, 0.12, 0.14), 1);
-
-                if (slope >= WALL_SLOPE_THRESHOLD) {
-                    const minN = Math.min(nE, nW, nN, nS);
-                    const diff = h - minN;
-
-                    if (diff > 1) {
-                        const depth = Math.min(diff - 1, CLIFF_WALL_MAX);
-                        let depthIndex = 1;
-
-                        const bottomY = Math.max(BEDROCK_Y + 1, h - depth);
-
-                        for (let y = h - 1; y >= bottomY; y--) {
-                            const matId = getMaterialAt(wx, y, wz);
-                            pushSurface(lx, y, lz, colorForMaterial(matId, base, depthIndex), 1);
-                            depthIndex++;
-                        }
-                    }
-                }
-
-                if (this.bounds) {
-                    const isEdgeColumn =
-                        wx === this.bounds.minWorldX ||
-                        wx === this.bounds.maxWorldX ||
-                        wz === this.bounds.minWorldZ ||
-                        wz === this.bounds.maxWorldZ;
-
-                    if (isEdgeColumn) {
-                        const depth = Math.min(EDGE_WALL_MAX, h - (BEDROCK_Y + 1));
-                        let depthIndex = 1;
-                        for (let y = h - 1; y >= Math.max(BEDROCK_Y + 1, h - depth); y--) {
-                            const matId = getMaterialAt(wx, y, wz);
-                            pushSurface(lx, y, lz, colorForMaterial(matId, base, depthIndex), 1);
-                            depthIndex++;
-                        }
+                // Fill vertical gaps (walls) to prevent "floating blocks" or holes
+                const minN = Math.min(nE, nW, nN, nS);
+                if (minN < h) {
+                    for (let y = h - 1; y >= minN; y--) {
+                        // Use a slightly darker color for sides/walls
+                        const sideColor = new Color3(base.r * 0.85, base.g * 0.85, base.b * 0.85);
+                        pushSurface(lx, y, lz, sideColor, 1);
                     }
                 }
 
@@ -305,43 +281,13 @@ export class Chunk {
                         wc.g * wf + tint.g * (1 - wf),
                         wc.b * wf + tint.b * (1 - wf)
                     );
+                    
+                    // Always render water at WATER_LEVEL
                     pushWater(lx, WATER_LEVEL, lz, wcc, 1);
-                }
-
-                // Ice (thin top sheet)
-                const ice = getIceFactor(wx, wz);
-                if (ice > 0.48 && h <= WATER_LEVEL + 1) {
-                    const ic = new Color3(0.62, 0.78, 0.95);
-                    const a = Math.min(0.82, 0.32 + ice * 0.55);
-                    pushSurface(lx, WATER_LEVEL + 1, lz, ic, a);
-                }
-
-                // River banks (slight darkening)
-                const rf = getRiverFactor(wx, wz);
-                if (rf > 0.55 && h >= WATER_LEVEL - 1) {
-                    const bank = shade(base, 0.82);
-                    pushSurface(lx, h, lz, bank, 1);
-                }
-
-                // Objects (ruins/trees/spires etc)
-                const blocks = getTreeAt(wx, wz, h);
-                if (Array.isArray(blocks) && blocks.length) {
-                    for (const b of blocks) {
-                        if (!b) continue;
-
-                        const type = (typeof b.type === "string" && b.type.length) ? b.type : "ruin";
-
-                        // Resolve to a guaranteed Color3
-                        const raw = treeColors[type];
-                        const c = resolveColor3(raw, ruinFallback);
-
-                        // b.x/y/z are ABSOLUTE (world) blocks in your codebase
-                        // Convert to chunk-local coordinates
-                        const lx2 = (Number.isFinite(b.x) ? b.x : wx) - xOffset;
-                        const lz2 = (Number.isFinite(b.z) ? b.z : wz) - zOffset;
-                        const y2 = Number.isFinite(b.y) ? b.y : (h + 1);
-
-                        pushSurface(lx2, y2, lz2, c, 1);
+                    
+                    // Fill water volume down to terrain to avoid "floating water" look
+                    for (let wy = WATER_LEVEL - 1; wy > h; wy--) {
+                         pushWater(lx, wy, lz, wcc, 0.4); // slightly lower alpha for deep water voxels
                     }
                 }
             }

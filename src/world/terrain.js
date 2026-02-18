@@ -59,16 +59,28 @@ function softClamp(v, hardMax, knee) {
 
 // ---- Rivers / Ravines ----
 export function getRiverFactor(x, z) {
-    const warp = fbm(x * 0.010, z * 0.010, 2, 2.0, 0.55);
-    const wx = x + warp * 18;
-    const wz = z - warp * 14;
+    const rf = worldConfig.rivers.riverFreq ?? 0.015;
+    
+    // Warped domain for natural curves
+    const warpX = fbm(x * 0.008, z * 0.008, 2, 2.0, 0.5) * 25;
+    const warpZ = fbm(x * 0.008 + 100, z * 0.008 + 100, 2, 2.0, 0.5) * 25;
+    
+    const wx = x + warpX;
+    const wz = z + warpZ;
 
-    const field = fbm(wx * 0.020 + 100, wz * 0.020 - 50, 2, 2.0, 0.55);
-    const d = Math.abs(field);
+    // Use a ridged-style field to create thin, long river channels
+    const field1 = fbm(wx * rf, wz * rf, 2, 2.0, 0.5);
+    const field2 = fbm(wx * rf + 50, wz * rf + 50, 2, 2.0, 0.5);
+    
+    // Intersection of two noise fields creates more branching/interesting paths
+    const d = Math.abs(field1) * 0.7 + Math.abs(field2) * 0.3;
 
-    // Wider and a bit stronger rivers (more visible water)
-    const river = clamp01(1.0 - (d / 0.28));
-    return river * river;
+    // Sharpen the river: thin but deep
+    const river = clamp01(1.0 - (d / 0.12));
+    
+    // Add some variation in width
+    const widthVar = (fbm(x * 0.05, z * 0.05, 2, 2.0, 0.5) + 1) * 0.5;
+    return river * river * (0.4 + 0.6 * widthVar);
 }
 
 
@@ -85,8 +97,14 @@ export function getRavineFactor(x, z) {
 
 function riverCarve(x, z) {
     const f = getRiverFactor(x, z);
-    if (f <= 0) return 0;
-    return -(f * worldConfig.rivers.riverDepth + f * fbm(x * 0.08, z * 0.08, 2, 2.0, 0.55) * 2.0);
+    if (f <= 0.05) return 0;
+    
+    // Carve deep enough to hit water level
+    const depth = worldConfig.rivers.riverDepth ?? 14.5;
+    const carve = -(f * depth + f * fbm(x * 0.1, z * 0.1, 2, 2.0, 0.5) * 3.0);
+    
+    // Bank softening
+    return carve;
 }
 
 function ravineCarve(x, z) {
@@ -107,40 +125,38 @@ export function getIceFactor(x, z, h) {
 
 // ---- Profiles ----
 function profileBase(x, z) {
-    const macro = fbm(x * 0.004, z * 0.004, 3, 2.0, 0.55);
-    return macro * 20.0 + 6.0;
+    const macro = fbm(x * 0.003, z * 0.003, 3, 2.0, 0.5);
+    const micro = fbm(x * 0.015, z * 0.015, 2, 2.0, 0.5) * 4.0;
+    return macro * 25.0 + 8.0 + micro;
 }
 
 function heightDesert(x, z) {
-    const base = profileBase(x, z) * 0.55;
+    const base = profileBase(x, z) * 0.5;
 
-    const dir = fbm(x * 0.002, z * 0.002, 2, 2.0, 0.55) * Math.PI;
+    const dir = fbm(x * 0.001, z * 0.001, 2, 2.0, 0.5) * Math.PI * 2;
     const v = Math.cos(dir) * x + Math.sin(dir) * z;
 
-    const dunes = Math.sin(v * 0.20) * 4.5 + Math.sin(v * 0.55) * 1.6;
-    const ripples = fbm(x * 0.09, z * 0.09, 2, 2.0, 0.55) * 1.2;
+    const dunes = Math.sin(v * 0.15) * 6.0 + Math.sin(v * 0.4) * 2.0;
+    const ripples = fbm(x * 0.12, z * 0.12, 2, 2.0, 0.5) * 0.8;
 
-    const wash = getRiverFactor(x * 0.9, z * 0.9);
-    const washCarve = -(wash * 5.5);
+    const lakeMask = clamp01(((fbm(x * 0.006 + 120, z * 0.006 - 60, 2, 2.0, 0.5) + 1) * 0.5 - 0.72) / 0.28);
+    const lake = lakeMask > 0 ? -(lakeMask * 22.0) : 0;
 
-    const mesaMask = clamp01(((fbm(x * 0.002 + 90, z * 0.002 - 40, 2, 2.0, 0.55) + 1) * 0.5 - 0.80) / 0.20);
-    const mesa = mesaMask > 0 ? mesaMask * 10.0 : 0;
+    const mesaMask = clamp01(((fbm(x * 0.0015 + 90, z * 0.0015 - 40, 2, 2.0, 0.5) + 1) * 0.5 - 0.82) / 0.18);
+    const mesa = mesaMask > 0 ? Math.pow(mesaMask, 0.5) * 15.0 : 0;
 
-    return base + dunes + ripples + washCarve + mesa;
+    return base + dunes + ripples + lake + mesa;
 }
 
 function heightSwamp(x, z) {
-    const base = profileBase(x, z) * 0.30 - 14.0;
+    const base = profileBase(x, z) * 0.35 - 12.0;
 
-    const basin = (fbm(x * 0.006, z * 0.006, 3, 2, 0.55) + 1) * 0.5;
-    const basinCarve = -(basin * 9.0);
+    const basin = (fbm(x * 0.007, z * 0.007, 3, 2, 0.5) + 1) * 0.5;
+    const basinCarve = -(basin * 12.0);
 
-    const puddle = fbm(x * 0.11 + 33, z * 0.11 - 44, 2, 2, 0.55) * 3.2;
+    const puddle = fbm(x * 0.12 + 33, z * 0.12 - 44, 2, 2, 0.5) * 3.5;
 
-    const channel = getRiverFactor(x * 1.1, z * 1.1);
-    const channelCarve = -(channel * 8.0);
-
-    return base + basinCarve + puddle + channelCarve;
+    return base + basinCarve + puddle;
 }
 
 function heightMountains(x, z) {
@@ -200,17 +216,20 @@ function heightVolcanic(x, z) {
 }
 
 function heightPlains(x, z) {
-    const base = profileBase(x, z) * 0.60;
-    const roll = fbm(x * 0.010, z * 0.010, 3, 2, 0.55) * 10.0;
-    const micro = fbm(x * 0.090 + 21, z * 0.090 - 13, 2, 2, 0.55) * 2.8;
-    return base + roll + micro;
+    const base = profileBase(x, z) * 0.5;
+    const roll = fbm(x * 0.008, z * 0.008, 3, 2.0, 0.5) * 12.0;
+    const micro = fbm(x * 0.08 + 21, z * 0.08 - 13, 2, 2.0, 0.5) * 2.5;
+
+    const lakeMask = clamp01(((fbm(x * 0.005 + 200, z * 0.005 - 100, 2, 2, 0.5) + 1) * 0.5 - 0.78) / 0.22);
+    const lake = -(lakeMask * 24.0);
+
+    return base + roll + micro + lake;
 }
 
 function heightForest(x, z) {
-    const base = heightPlains(x, z) * 0.95;
-    const hum = fbm(x * 0.060, z * 0.060, 2, 2, 0.55) * 3.2;
-    const creek = getRiverFactor(x * 1.05, z * 1.05) * -3.5;
-    return base + hum + creek;
+    const base = heightPlains(x, z) * 0.98;
+    const hum = fbm(x * 0.065, z * 0.065, 2, 2, 0.5) * 4.0;
+    return base + hum;
 }
 
 function heightGlacier(x, z) {

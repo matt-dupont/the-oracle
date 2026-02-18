@@ -1,0 +1,123 @@
+{
+  "world": {
+    "waterLevel": -12
+  },
+  "climate": {
+    "tempScale": 0.0024,
+    "moistScale": 0.0022,
+    "elevScale": 0.0016,
+    "blendBand": 0.085
+  },
+  "profiles": {
+    "riverlands": { "vertical": 0.55, "roughness": 0.65, "riverDepth": 6.5, "riverWidth": 0.060 },
+    "desert":     { "vertical": 0.55, "roughness": 0.55, "riverDepth": 2.6, "riverWidth": 0.035, "dunes": 1.0, "mesa": 0.6 },
+    "swamp":      { "vertical": 0.35, "roughness": 0.55, "riverDepth": 5.2, "riverWidth": 0.070, "lowlands": 1.0 },
+    "peaks":      { "vertical": 0.92, "roughness": 0.75, "riverDepth": 4.0, "riverWidth": 0.040, "peaks": 1.0 },
+    "glacier":    { "vertical": 0.85, "roughness": 0.55, "riverDepth": 5.8, "riverWidth": 0.055, "glacier": 1.0 },
+    "crystal":    { "vertical": 0.75, "roughness": 0.45, "riverDepth": 3.4, "riverWidth": 0.040, "steps": 1.0 }
+  },
+  "biomes": [
+    {
+      "id": "crimson_desert",
+      "name": "Crimson Desert",
+      "climate": { "temp": [0.68, 1.0], "moist": [0.0, 0.35], "elev": [0.20, 0.80], "weight": 1.10 },
+      "terrain": { "profile": "desert" },
+      "colors": {
+        "base":  [0.86, 0.42, 0.20],
+        "river": [0.22, 0.35, 0.32],
+        "water": [0.08, 0.16, 0.22],
+        "snow":  [0.88, 0.90, 0.92],
+        "ice":   [0.60, 0.82, 0.95]
+      },
+      "objects": {
+        "poi": { "ruin": 0.16, "spire": 0.18, "crystal": 0.10, "geyser": 0.00, "monolith": 0.26 },
+        "flora": { "plant": 0.30 }
+      }
+    },
+    {
+      "id": "alien_swamp",
+      "name": "Alien Swamp",
+      "climate": { "temp": [0.45, 0.80], "moist": [0.65, 1.0], "elev": [0.05, 0.55], "weight": 1.20 },
+      "terrain": { "profile": "swamp" },
+      "colors": {
+        "base":  [0.12, 0.32, 0.22],
+        "river": [0.10, 0.40, 0.28],
+        "water": [0.05, 0.14, 0.12],
+        "snow":  [0.90, 0.92, 0.95],
+        "ice":   [0.62, 0.86, 0.95]
+      },
+      "objects": {
+        "poi": { "ruin": 0.08, "spire": 0.10, "crystal": 0.00, "geyser": 0.10, "monolith": 0.18 },
+        "flora": { "plant": 0.54 }
+      }
+    },
+    {
+      "id": "obsidian_peaks",
+      "name": "Obsidian Peaks",
+      "climate": { "temp": [0.15, 0.55], "moist": [0.05, 0.55], "elev": [0.65, 1.0], "weight": 1.25 },
+      "terrain": { "profile": "peaks" },
+      "colors": {
+        "base":  [0.16, 0.16, 0.18],
+        "river": [0.20, 0.34, 0.40],
+        "water": [0.08, 0.14, 0.20],
+        "snow":  [0.92, 0.93, 0.95],
+        "ice":   [0.62, 0.84, 0.96]
+      },
+      "objects": {
+        "poi": { "ruin": 0.10, "spire": 0.26, "crystal": 0.06, "geyser": 0.06, "monolith": 0.16 },
+        "flora": { "plant": 0.36 }
+      }
+    },
+    {
+      "id": "glacial_tundra",
+      "name": "Glacial Tundra",
+      "climate": { "temp": [0.0, 0.32], "moist": [0.25, 0.85], "elev": [0.25, 1.0], "weight": 1.35 },
+      "terrain": { "profile": "glacier" },
+      "colors": {
+        "base":  [0.70, 0.78, 0.86],
+        "river": [0.45, 0.75, 0.92],
+        "water": [0.10, 0.18, 0.26],
+        "snow":  [0.96, 0.97, 0.99],
+        "ice":   [0.62, 0.86, 0.98]
+      },
+      "objects": {
+        "poi": { "ruin": 0.10, "spire": 0.10, "crystal": 0.06, "geyser": 0.18, "monolith": 0.06 },
+        "flora": { "plant": 0.50 }
+      }
+    },
+    {
+      "id": "crystal_plateau",
+      "name": "Crystal Plateau",
+      "climate": { "temp": [0.35, 0.72], "moist": [0.10, 0.55], "elev": [0.45, 0.90], "weight": 1.05 },
+      "terrain": { "profile": "crystal" },
+      "colors": {
+        "base":  [0.42, 0.24, 0.62],
+        "river": [0.24, 0.48, 0.62],
+        "water": [0.08, 0.14, 0.24],
+        "snow":  [0.92, 0.93, 0.96],
+        "ice":   [0.62, 0.86, 0.98]
+      },
+      "objects": {
+        "poi": { "ruin": 0.06, "spire": 0.12, "crystal": 0.28, "geyser": 0.06, "monolith": 0.12 },
+        "flora": { "plant": 0.36 }
+      }
+    },
+    {
+      "id": "emerald_riverlands",
+      "name": "Emerald Riverlands",
+      "climate": { "temp": [0.42, 0.80], "moist": [0.40, 0.85], "elev": [0.15, 0.70], "weight": 1.15 },
+      "terrain": { "profile": "riverlands" },
+      "colors": {
+        "base":  [0.16, 0.42, 0.26],
+        "river": [0.18, 0.55, 0.45],
+        "water": [0.08, 0.16, 0.22],
+        "snow":  [0.92, 0.93, 0.95],
+        "ice":   [0.62, 0.86, 0.98]
+      },
+      "objects": {
+        "poi": { "ruin": 0.14, "spire": 0.10, "crystal": 0.06, "geyser": 0.06, "monolith": 0.14 },
+        "flora": { "plant": 0.50 }
+      }
+    }
+  ]
+}

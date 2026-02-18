@@ -1,8 +1,8 @@
 {
   "waterLevel": -9,
 
-  "biomeCell": 52,
-  "transitionBand": 0.28,
+  "biomeCell": 32,
+  "transitionBand": 0.22,
 
   "climate": {
     "warpFreq": 0.03,
@@ -181,7 +181,8 @@
   },
 
   "rivers": {
-    "riverDepth": 12.5,
+    "riverFreq": 0.015,
+    "riverDepth": 14.5,
     "ravineDepth": 8.0,
     "ravineMix": 0.85
   }

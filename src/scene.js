@@ -7,6 +7,8 @@ import {
     Color4,
     HemisphericLight,
     DirectionalLight,
+    ShadowGenerator,
+    PointLight,
     Color3,
     StandardMaterial,
     MeshBuilder,
@@ -138,6 +140,11 @@ function spawnCityAndBuilders(scene, world, buildersCount) {
     city.position.set(x, y + 4, z);
     city.isPickable = true;
 
+    const cityLight = new PointLight("cityLight", city.position.clone(), scene);
+    cityLight.intensity = 0.8;
+    cityLight.range = 30;
+    cityLight.diffuse = new Color3(0.0, 0.8, 1.0);
+
     const cityMat = new StandardMaterial("cityMat", scene);
     cityMat.diffuseColor = new Color3(0.03, 0.06, 0.08);
     cityMat.emissiveColor = new Color3(0.0, 0.65, 0.85);
@@ -162,14 +169,20 @@ function spawnCityAndBuilders(scene, world, buildersCount) {
         b.isPickable = true;
         b.material = bMat;
 
+        const bLight = new PointLight(`builderLight_${i}`, b.position.clone(), scene);
+        bLight.intensity = 0.6;
+        bLight.range = 20;
+        bLight.diffuse = new Color3(0.2, 0.6, 1.0);
+
         builders.push({
             mesh: b,
+            light: bLight,
             target: b.position.clone(),
             speed: 28 + (i === 0 ? 6 : 0),
         });
     }
 
-    return { city, builders };
+    return { city, cityLight, builders };
 }
 
 export function createScene(canvas, initialSettings = {}) {
@@ -185,10 +198,21 @@ export function createScene(canvas, initialSettings = {}) {
     const sun = new DirectionalLight("sun", new Vector3(-0.35, -1.0, -0.2), scene);
     sun.intensity = 0.72;
 
+
     const topCam = new ArcRotateCamera("topCam", -Math.PI / 2, Math.PI / 3.0, 260, new Vector3(0, 0, 0), scene);
     topCam.attachControl(canvas, true);
     topCam.lowerBetaLimit = 0.20;
     topCam.upperBetaLimit = 1.45;
+
+    // Prevent camera from going below voxels
+    topCam.onViewMatrixChangedObservable.add(() => {
+        if (world) {
+            const groundY = world.getGroundY(topCam.position.x, topCam.position.z);
+            if (topCam.position.y < groundY + 10) {
+                topCam.position.y = groundY + 10;
+            }
+        }
+    });
 
     topCam.angularSensibilityX = 150;
     topCam.angularSensibilityY = 150;
@@ -218,6 +242,22 @@ export function createScene(canvas, initialSettings = {}) {
 
     let pickPlane = null;
 
+    let shadows = null;
+
+    function cleanupSpawned() {
+        if (spawned) {
+            if (spawned.city) spawned.city.dispose();
+            if (spawned.cityLight) spawned.cityLight.dispose();
+            if (spawned.builders) {
+                for (const b of spawned.builders) {
+                    if (b.mesh) b.mesh.dispose();
+                    if (b.light) b.light.dispose();
+                }
+            }
+            spawned = null;
+        }
+    }
+
     function applySettings(settings) {
         topCam.angularSensibilityX = settings.rightDrag ?? 150;
         topCam.angularSensibilityY = settings.rightDrag ?? 150;
@@ -229,11 +269,21 @@ export function createScene(canvas, initialSettings = {}) {
         visionRadius = settings.visionRadius ?? 190;
         builderCount = settings.builders ?? 6;
 
+        if (world) world.dispose();
+        cleanupSpawned();
         world = new World(scene, {
             sizeChunks: settings.mapChunks ?? 33,
             budgetBoot: settings.budgetBoot ?? 64,
             budgetSteady: Math.max(10, Math.floor((settings.budgetBoot ?? 64) * 0.25)),
         });
+
+        if (shadows) shadows.dispose();
+        shadows = new ShadowGenerator(1024, sun);
+        shadows.useBlurExponentialShadowMap = true;
+        shadows.blurKernel = 32;
+        shadows.setDarkness(0.2);
+        // Cascade to world
+        world.shadows = shadows;
 
         const plateSizeVox = world.sizeChunks * 16;
         const plateRadius = plateSizeVox * 0.5;
@@ -304,13 +354,18 @@ export function createScene(canvas, initialSettings = {}) {
             return;
         }
 
-        if (!borderBuilt) {
-            createSandboxBorder(scene, world);
-            borderBuilt = true;
-        }
-
         if (!spawned) {
             spawned = spawnCityAndBuilders(scene, world, builderCount);
+            if (shadows) {
+                shadows.addShadowCaster(spawned.city);
+                for (const b of spawned.builders) {
+                    shadows.addShadowCaster(b.mesh);
+                }
+            }
+            // Update city light position once spawned
+            if (spawned.cityLight) {
+                spawned.cityLight.position.copyFrom(spawned.city.position);
+            }
         }
 
         if (loadingFade < 1) {
@@ -376,6 +431,7 @@ export function createScene(canvas, initialSettings = {}) {
 
                 const y = world.getGroundY(m.position.x, m.position.z);
                 m.position.y = y + 1.2;
+                b.light.position.copyFrom(m.position);
             }
         }
 
